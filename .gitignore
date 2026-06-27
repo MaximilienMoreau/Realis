@@ -1,0 +1,32 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+backend/src/main/resources/application-local.yml
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.pnpm-store/
+
+# Java / Maven
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+!backend/src/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Données locales (captures chiffrées — ne jamais committer)
+data/
