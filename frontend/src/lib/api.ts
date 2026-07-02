@@ -1,6 +1,26 @@
-import { getToken } from "@/lib/auth";
+import { getToken, clearAuth } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
+// Le token a expiré ou est invalide : le backend renvoie un 401 à corps vide
+// (aucun AuthenticationEntryPoint JSON côté Spring Security), donc on ne
+// peut pas se fier à `data.message` pour ce cas précis.
+export class AuthExpiredError extends Error {
+  constructor() {
+    super("Session expirée, veuillez vous reconnecter.");
+    this.name = "AuthExpiredError";
+  }
+}
+
+async function parseJsonSafe(res: Response): Promise<any> {
+  const text = await res.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
 
 // ── Types partagés ────────────────────────────────────────────────────────────
 
@@ -89,7 +109,11 @@ export async function sealCapture(params: {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: form,
   });
-  const data = await res.json();
+  if (res.status === 401) {
+    clearAuth();
+    throw new AuthExpiredError();
+  }
+  const data = await parseJsonSafe(res);
   if (!res.ok) throw new Error(data.message ?? "Erreur lors du scellement");
   return data;
 }

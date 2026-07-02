@@ -3,7 +3,7 @@
 import { useState } from "react";
 import ConsentForm, { type ConsentData } from "@/components/ConsentForm";
 import VideoCapture, { type CaptureMetadata } from "@/components/VideoCapture";
-import { registerUser, loginUser, sealCapture, certificateUrl, type SealResponse } from "@/lib/api";
+import { registerUser, loginUser, sealCapture, certificateUrl, AuthExpiredError, type SealResponse } from "@/lib/api";
 import { saveAuth, getStoredUser, clearAuth, isAuthenticated } from "@/lib/auth";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ export default function NouveauPage() {
   const [sealResult, setSealResult] = useState<SealResponse | null>(null);
   const [sealError, setSealError]   = useState<string | null>(null);
 
-  const handleAuth = () => setStep("consent");
+  const handleAuth = () => { setSealError(null); setStep("consent"); };
 
   const handleConsent = (data: ConsentData) => {
     setConsent(data);
@@ -40,6 +40,11 @@ export default function NouveauPage() {
       setSealResult(record);
       setStep("done");
     } catch (err) {
+      if (err instanceof AuthExpiredError) {
+        setSealError(err.message);
+        setStep("auth");
+        return;
+      }
       setSealError(err instanceof Error ? err.message : "Erreur inattendue lors du scellement.");
       setStep("capture");
     }
@@ -56,21 +61,20 @@ export default function NouveauPage() {
 
         <StepIndicator current={step} />
 
+        {sealError && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-sm">
+            {sealError}
+          </div>
+        )}
+
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           {step === "auth" && <AuthStep onAuth={handleAuth} />}
           {step === "consent" && <ConsentForm onConsent={handleConsent} />}
           {step === "capture" && consent && (
-            <div className="space-y-4">
-              {sealError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-sm">
-                  {sealError}
-                </div>
-              )}
-              <VideoCapture
-                geolocConsented={consent.geolocConsented}
-                onCaptured={handleCaptured}
-              />
-            </div>
+            <VideoCapture
+              geolocConsented={consent.geolocConsented}
+              onCaptured={handleCaptured}
+            />
           )}
           {step === "sealing" && <SealingStep />}
           {step === "done" && sealResult && <DoneStep record={sealResult} />}

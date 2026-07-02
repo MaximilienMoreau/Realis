@@ -3,6 +3,7 @@ const USER_ID_KEY = "realis_user_id";
 const EMAIL_KEY   = "realis_email";
 
 export function saveAuth(token: string, userId: string, email: string): void {
+  if (typeof window === "undefined") return;
   localStorage.setItem(TOKEN_KEY,   token);
   localStorage.setItem(USER_ID_KEY, userId);
   localStorage.setItem(EMAIL_KEY,   email);
