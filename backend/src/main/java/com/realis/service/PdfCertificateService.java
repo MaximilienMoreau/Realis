@@ -168,7 +168,7 @@ public class PdfCertificateService {
         return new Paragraph("").setMarginBottom(height).setMarginTop(0);
     }
 
-    /** Avertissement légal — exigence spec : visible et précis. */
+    /** Avertissement légal, exigence spec : visible et précis. */
     private Table legalWarning(PdfFont bold, PdfFont regular) throws IOException {
         Table t = new Table(UnitValue.createPercentArray(new float[]{100}))
             .setWidth(UnitValue.createPercentValue(100));

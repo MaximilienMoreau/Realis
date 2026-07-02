@@ -36,7 +36,7 @@ CREATE TABLE sealed_records (
     file_size_bytes  BIGINT NOT NULL,
     mime_type        TEXT NOT NULL,
     sha256_hex       TEXT NOT NULL,
-    -- Jeton RFC 3161 brut (DER) — vérifiable indépendamment
+    -- Jeton RFC 3161 brut (DER) : vérifiable indépendamment
     tsa_token_der    BYTEA NOT NULL,
     tsa_url          TEXT NOT NULL,
     tsa_timestamp    TIMESTAMPTZ NOT NULL,
@@ -46,7 +46,7 @@ CREATE TABLE sealed_records (
     device_ua        TEXT,
     -- Chemin chiffré sur volume (jamais le fichier brut en clair)
     storage_path     TEXT NOT NULL,
-    -- Suppression logique uniquement (casse la preuve — avertissement obligatoire)
+    -- Suppression logique uniquement (casse la preuve, avertissement obligatoire)
     deleted_at       TIMESTAMPTZ
 );
 

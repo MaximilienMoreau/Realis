@@ -57,7 +57,7 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
                 <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${record.tsaActive ? "bg-green-500" : "bg-amber-400"}`} />
                 <div>
                   <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    Horodatage RFC 3161 — {record.tsaActive ? "ACTIF" : "NON ACTIF (développement)"}
+                    Horodatage RFC 3161 : {record.tsaActive ? "ACTIF" : "NON ACTIF (développement)"}
                   </p>
                   {record.tsaActive && record.tsaTimestamp && (
                     <p className="text-xs text-gray-400 dark:text-gray-500">{fmt(record.tsaTimestamp)}</p>

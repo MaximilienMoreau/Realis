@@ -61,13 +61,13 @@ async function ApiStatus() {
     const data = (await res.json()) as { status: string; timestamp: string };
     return (
       <p className="text-xs text-green-600 dark:text-green-400">
-        Backend : {data.status} — {data.timestamp}
+        Backend : {data.status} · {data.timestamp}
       </p>
     );
   } catch {
     return (
       <p className="text-xs text-red-400 dark:text-red-500">
-        Backend inaccessible — vérifiez docker-compose
+        Backend inaccessible : vérifiez docker-compose
       </p>
     );
   }

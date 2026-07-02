@@ -6,8 +6,8 @@ import java.time.Instant;
  * Résultat de la vérification d'un fichier.
  *
  * Les deux vérifications sont présentées séparément, conformément à la spec :
- *  (a) integrityCheck — le hash SHA-256 correspond à l'enregistrement scellé
- *  (b) tsaCheck       — le jeton RFC 3161 est cryptographiquement valide
+ *  (a) integrityCheck : le hash SHA-256 correspond à l'enregistrement scellé
+ *  (b) tsaCheck       : le jeton RFC 3161 est cryptographiquement valide
  *
  * Verdicts possibles :
  *  - AUTHENTIQUE : hash identique + enregistrement actif

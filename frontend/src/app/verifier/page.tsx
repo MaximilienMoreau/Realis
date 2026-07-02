@@ -221,7 +221,7 @@ function RecordDetails({ record }: { record: NonNullable<VerificationResponse["r
             ["Taille",      formatSize(record.fileSizeBytes)],
             ["Format",      record.mimeType],
             ["Scellé le",   fmt(record.sealedAt)],
-            ["TSA",         record.tsaTimestamp ? fmt(record.tsaTimestamp) : "—"],
+            ["TSA",         record.tsaTimestamp ? fmt(record.tsaTimestamp) : "Non disponible"],
           ].map(([label, value]) => (
             <tr key={label}>
               <td className="py-1.5 pr-3 text-gray-400 dark:text-gray-500 font-medium whitespace-nowrap">{label}</td>

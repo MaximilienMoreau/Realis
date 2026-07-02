@@ -107,7 +107,7 @@ public class SealingService {
     }
 
     /**
-     * Réservé au propriétaire — la page publique de vérification utilise
+     * Réservé au propriétaire : la page publique de vérification utilise
      * VerificationService.getPublicMetadata, qui ne nécessite pas d'auth.
      */
     @Transactional(readOnly = true)
@@ -121,7 +121,7 @@ public class SealingService {
     }
 
     /**
-     * Suppression logique — invalide la preuve.
+     * Suppression logique : invalide la preuve.
      * Un avertissement explicite est inclus dans la réponse.
      */
     @Transactional
@@ -147,7 +147,7 @@ public class SealingService {
             .user(user)
             .sessionId(UUID.randomUUID().toString())
             .geolocConsented(request.geolocLat() != null && request.geolocLng() != null)
-            .purposeText("État des lieux — scellement de capture (MVP). " +
+            .purposeText("État des lieux : scellement de capture (MVP). " +
                          "Conservation 365 jours à des fins de preuve d'intégrité.")
             .retentionDays(365)
             .userAgent(request.deviceUa())

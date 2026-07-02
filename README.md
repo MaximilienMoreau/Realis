@@ -1,12 +1,37 @@
-# Realis — Certification du réel (MVP)
+<div align="center">
 
-Service de certification de l'intégrité et de l'antériorité de captures numériques.
-Hash SHA-256 + horodatage cryptographique RFC 3161 (TSP).
+# Realis
+
+**Certification du réel**
+
+Service de certification de l'intégrité et de l'antériorité de captures numériques,
+basé sur un hash SHA-256 et un horodatage cryptographique RFC 3161 (TSP).
+
+![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat-square&logo=next.js&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3-6DB33F?style=flat-square&logo=springboot&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![RFC 3161](https://img.shields.io/badge/Horodatage-RFC%203161-2D52C4?style=flat-square)
+![Statut](https://img.shields.io/badge/Statut-MVP-lightgrey?style=flat-square)
+
+</div>
+
+<br>
 
 > **Important** : le certificat Realis est une preuve d'intégrité et d'antériorité
 > (hash + horodatage RFC 3161). Il ne constitue pas un acte authentique au sens juridique.
 
----
+<br>
+
+## Sommaire
+
+- [Démarrage rapide](#démarrage-rapide)
+- [Architecture](#architecture)
+- [Développement local](#développement-local-sans-docker)
+- [Vérification indépendante d'un jeton TSA](#vérification-indépendante-dun-jeton-tsa)
+- [RGPD](#rgpd)
+
+<br>
 
 ## Démarrage rapide
 
@@ -37,9 +62,15 @@ openssl rand -base64 32
 docker compose up --build
 ```
 
-- Frontend : [http://localhost:3000](http://localhost:3000)
-- Backend API : [http://localhost:8080/api/health](http://localhost:8080/api/health)
-- PostgreSQL : localhost:5432
+<div align="center">
+
+| Service | URL |
+|:---|:---|
+| **Frontend** | [http://localhost:3000](http://localhost:3000) |
+| **Backend API** | [http://localhost:8080/api/health](http://localhost:8080/api/health) |
+| **PostgreSQL** | `localhost:5432` |
+
+</div>
 
 ### 3. Vérifier que tout tourne
 
@@ -51,21 +82,23 @@ curl http://localhost:8080/api/health
 docker compose logs -f backend
 ```
 
----
+<br>
 
 ## Architecture
 
 ```
 Realis/
-├── frontend/   Next.js 14 (App Router) + TypeScript + Tailwind — PWA
-├── backend/    Spring Boot 3 (Java 21) — API REST
+├── frontend/   Next.js 14 (App Router), TypeScript, Tailwind (PWA)
+├── backend/    Spring Boot 3 (Java 21), API REST
 └── docker-compose.yml
 ```
 
 ### Stack technique
 
+<div align="center">
+
 | Composant | Technologie | Raison |
-|-----------|-------------|--------|
+|:---|:---|:---|
 | Frontend | Next.js 14 + Tailwind | PWA, App Router, SSR |
 | Backend | Spring Boot 3, Java 21 | Robustesse, écosystème crypto Java |
 | Base de données | PostgreSQL 16 | ACID, triggers d'immuabilité |
@@ -74,6 +107,8 @@ Realis/
 | PDF | iText 8 Community (AGPL) | PDF/A, API fluide |
 | Chiffrement at rest | AES-256-GCM (JCA) | Captures chiffrées sur disque |
 | Auth | JWT (JJWT) | Stateless, découplé |
+
+</div>
 
 ### Flux de scellement
 
@@ -86,7 +121,7 @@ Caméra → blob vidéo → upload backend
   → retour identifiant + lien de vérification
 ```
 
----
+<br>
 
 ## Développement local (sans Docker)
 
@@ -112,7 +147,7 @@ npm install
 NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev
 ```
 
----
+<br>
 
 ## Vérification indépendante d'un jeton TSA
 
@@ -127,7 +162,7 @@ openssl ts -verify -in token.tsr -data fichier_original.webm \
   -CAfile freetsa-ca.crt
 ```
 
----
+<br>
 
 ## RGPD
 
@@ -135,3 +170,11 @@ openssl ts -verify -in token.tsr -data fichier_original.webm \
 - Les captures sont chiffrées at rest (AES-256-GCM).
 - Endpoint de suppression logique disponible (avec avertissement : la suppression invalide la preuve).
 - Minimisation des données : seuls les champs nécessaires à la preuve sont collectés.
+
+<br>
+
+<div align="center">
+
+*Realis : MVP en développement*
+
+</div>

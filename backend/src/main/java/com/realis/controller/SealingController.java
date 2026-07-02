@@ -85,7 +85,7 @@ public class SealingController {
     }
 
     /**
-     * Suppression logique — invalide la preuve définitivement.
+     * Suppression logique : invalide la preuve définitivement.
      * L'identité du demandeur est vérifiée via JWT (doit correspondre au propriétaire).
      */
     @DeleteMapping("/{id}")
