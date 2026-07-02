@@ -2,7 +2,6 @@ package com.realis.service;
 
 import com.realis.dto.VerificationResponse;
 import com.realis.dto.VerificationResponse.Verdict;
-import com.realis.exception.ResourceNotFoundException;
 import com.realis.model.ConsentLog;
 import com.realis.model.SealedRecord;
 import com.realis.model.User;
@@ -158,16 +157,19 @@ class VerificationServiceTest {
     // ── Cas 5 : recordId introuvable ─────────────────────────────────────────
 
     @Test
-    @DisplayName("RecordId inexistant → ResourceNotFoundException")
-    void verify_unknownRecordId_throwsNotFoundException() {
+    @DisplayName("RecordId inexistant → INCONNU (même contrat que le mode sans recordId)")
+    void verify_unknownRecordId_returnsInconnu() throws IOException {
         UUID unknownId = UUID.randomUUID();
         when(repo.findById(unknownId)).thenReturn(Optional.empty());
 
         MockMultipartFile file = new MockMultipartFile("file", "f.webm",
             "video/webm", ORIGINAL_BYTES);
 
-        assertThatThrownBy(() -> service.verify(file, unknownId))
-            .isInstanceOf(ResourceNotFoundException.class);
+        VerificationResponse result = service.verify(file, unknownId);
+
+        assertThat(result.verdict()).isEqualTo(Verdict.INCONNU);
+        assertThat(result.record()).isNull();
+        assertThat(result.tsaCheck()).isNull();
     }
 
     // ── Cas 6 : le hash uploadé correspond octet pour octet ──────────────────

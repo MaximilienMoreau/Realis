@@ -47,12 +47,12 @@ public class SealingService {
      * Aucun ré-encodage n'est effectué.
      */
     @Transactional
-    public SealResponse seal(MultipartFile file, UUID userId, SealRequest request) throws IOException {
+    public SealResponse seal(MultipartFile file, UUID userId, SealRequest request, String clientIp) throws IOException {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable : " + userId));
 
         // Enregistrement du consentement
-        ConsentLog consent = createConsentLog(user, request);
+        ConsentLog consent = createConsentLog(user, request, clientIp);
 
         UUID recordId = UUID.randomUUID();
 
@@ -106,10 +106,17 @@ public class SealingService {
         }
     }
 
+    /**
+     * Réservé au propriétaire — la page publique de vérification utilise
+     * VerificationService.getPublicMetadata, qui ne nécessite pas d'auth.
+     */
     @Transactional(readOnly = true)
-    public SealResponse findById(UUID id) {
+    public SealResponse findByIdForOwner(UUID id, UUID requestingUserId) {
         SealedRecord record = sealedRecordRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Enregistrement introuvable : " + id));
+        if (!record.getUser().getId().equals(requestingUserId)) {
+            throw new SecurityException("Accès refusé");
+        }
         return SealResponse.from(record);
     }
 
@@ -135,7 +142,7 @@ public class SealingService {
         return SealResponse.from(record);
     }
 
-    private ConsentLog createConsentLog(User user, SealRequest request) {
+    private ConsentLog createConsentLog(User user, SealRequest request, String clientIp) {
         ConsentLog consent = ConsentLog.builder()
             .user(user)
             .sessionId(UUID.randomUUID().toString())
@@ -144,6 +151,7 @@ public class SealingService {
                          "Conservation 365 jours à des fins de preuve d'intégrité.")
             .retentionDays(365)
             .userAgent(request.deviceUa())
+            .ipAddress(clientIp)
             .build();
         return consentLogRepository.save(consent);
     }

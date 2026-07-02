@@ -7,6 +7,7 @@ import com.realis.model.SealedRecord;
 import com.realis.repository.SealedRecordRepository;
 import com.realis.service.PdfCertificateService;
 import com.realis.service.SealingService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -42,20 +43,22 @@ public class SealingController {
         @RequestParam(value = "geolocLat", required = false) Double  geolocLat,
         @RequestParam(value = "geolocLng", required = false) Double  geolocLng,
         @RequestParam(value = "deviceUa",  required = false) String  deviceUa,
-        Authentication authentication
+        Authentication authentication,
+        HttpServletRequest httpRequest
     ) throws IOException {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("Le fichier ne peut pas être vide");
         }
         UUID userId = (UUID) authentication.getPrincipal();
         SealRequest request = new SealRequest(mimeType, geolocLat, geolocLng, deviceUa);
-        SealResponse response = sealingService.seal(file, userId, request);
+        SealResponse response = sealingService.seal(file, userId, request, httpRequest.getRemoteAddr());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<SealResponse> getById(@PathVariable UUID id) {
-        return ResponseEntity.ok(sealingService.findById(id));
+    public ResponseEntity<SealResponse> getById(@PathVariable UUID id, Authentication authentication) {
+        UUID userId = (UUID) authentication.getPrincipal();
+        return ResponseEntity.ok(sealingService.findByIdForOwner(id, userId));
     }
 
     /**

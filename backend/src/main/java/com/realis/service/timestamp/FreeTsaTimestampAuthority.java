@@ -17,6 +17,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
@@ -44,6 +45,7 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
     private static final int STATUS_GRANTED_WITH_MODS = 1;
 
     private final TsaProperties props;
+    private final SecureRandom rng = new SecureRandom();
 
     public FreeTsaTimestampAuthority(TsaProperties props) {
         this.props = props;
@@ -55,7 +57,7 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
             // Requête RFC 3161 : certReq=true pour recevoir le cert TSA dans la réponse
             TimeStampRequestGenerator gen = new TimeStampRequestGenerator();
             gen.setCertReq(true);
-            BigInteger nonce = BigInteger.valueOf(System.currentTimeMillis());
+            BigInteger nonce = new BigInteger(64, rng);
             TimeStampRequest request = gen.generate(TSPAlgorithms.SHA256, sha256Bytes, nonce);
 
             log.debug("Envoi requête TSA à {} ({} octets)", props.url(), request.getEncoded().length);

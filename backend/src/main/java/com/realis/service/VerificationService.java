@@ -52,12 +52,24 @@ public class VerificationService {
     /**
      * Mode 1 — Vérification contre un enregistrement précis (identifié par son UUID).
      * Permet d'obtenir un verdict ALTÉRÉ définitif si le hash diffère.
+     *
+     * Si le recordId ne correspond à aucun enregistrement, on retombe sur le même
+     * contrat que le mode 2 (verdict INCONNU) plutôt que de laisser fuiter une
+     * ResourceNotFoundException — le client reçoit toujours un VerificationResponse.
      */
     private VerificationResponse verifyAgainstRecord(String uploadedHash, UUID recordId) {
-        SealedRecord record = sealedRecordRepository.findById(recordId)
-            .orElseThrow(() -> new ResourceNotFoundException(
-                "Enregistrement introuvable : " + recordId
-            ));
+        Optional<SealedRecord> found = sealedRecordRepository.findById(recordId);
+        if (found.isEmpty()) {
+            return new VerificationResponse(
+                Verdict.INCONNU,
+                uploadedHash,
+                null,
+                new IntegrityCheckResult(false,
+                    "L'identifiant d'enregistrement fourni (" + recordId + ") n'existe pas."),
+                null
+            );
+        }
+        SealedRecord record = found.get();
 
         boolean hashMatches = uploadedHash.equalsIgnoreCase(record.getSha256Hex());
         Verdict verdict = hashMatches ? Verdict.AUTHENTIQUE : Verdict.ALTERE;
