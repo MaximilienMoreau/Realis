@@ -15,7 +15,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DisplayName("StorageService — chiffrement AES-256-GCM")
+@DisplayName("StorageService : chiffrement AES-256-GCM")
 class StorageServiceTest {
 
     // Clé AES-256 de test (32 octets, NE PAS réutiliser en production)

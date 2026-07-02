@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.UUID;
 
 /**
- * Endpoints de vérification — tous publics, sans authentification.
+ * Endpoints de vérification : tous publics, sans authentification.
  *
  * POST /api/verify                → verdict sur un fichier uploadé
  * GET  /api/verify/{id}           → métadonnées publiques d'un enregistrement

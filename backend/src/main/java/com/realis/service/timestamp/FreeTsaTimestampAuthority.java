@@ -79,7 +79,7 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
             byte[] tokenDer    = bcToken.getEncoded();
             Instant tsaInstant = bcToken.getTimeStampInfo().getGenTime().toInstant();
 
-            log.info("Horodatage obtenu — certifié le {} par {}", tsaInstant, props.url());
+            log.info("Horodatage obtenu : certifié le {} par {}", tsaInstant, props.url());
             return new TimestampToken(tokenDer, tsaInstant, props.url());
 
         } catch (TimestampException e) {
@@ -130,7 +130,7 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
             X509CertificateHolder signerCert = resolveSignerCert(signedData, si);
             if (signerCert == null) {
                 return new TsaVerificationResult(false, null,
-                    "Certificat TSA introuvable — impossible de vérifier la signature du jeton.");
+                    "Certificat TSA introuvable : impossible de vérifier la signature du jeton.");
             }
 
             bcToken.validate(
@@ -139,7 +139,7 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
 
             Instant tsaInstant = bcToken.getTimeStampInfo().getGenTime().toInstant();
             return new TsaVerificationResult(true, tsaInstant,
-                "Jeton TSA valide — horodatage certifié le " + tsaInstant + " par " + props.url());
+                "Jeton TSA valide : horodatage certifié le " + tsaInstant + " par " + props.url());
 
         } catch (TSPValidationException e) {
             // La signature TSA est cryptographiquement invalide

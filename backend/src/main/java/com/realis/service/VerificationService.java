@@ -50,12 +50,12 @@ public class VerificationService {
     }
 
     /**
-     * Mode 1 — Vérification contre un enregistrement précis (identifié par son UUID).
+     * Mode 1 : Vérification contre un enregistrement précis (identifié par son UUID).
      * Permet d'obtenir un verdict ALTÉRÉ définitif si le hash diffère.
      *
      * Si le recordId ne correspond à aucun enregistrement, on retombe sur le même
      * contrat que le mode 2 (verdict INCONNU) plutôt que de laisser fuiter une
-     * ResourceNotFoundException — le client reçoit toujours un VerificationResponse.
+     * ResourceNotFoundException : le client reçoit toujours un VerificationResponse.
      */
     private VerificationResponse verifyAgainstRecord(String uploadedHash, UUID recordId) {
         Optional<SealedRecord> found = sealedRecordRepository.findById(recordId);
@@ -88,7 +88,7 @@ public class VerificationService {
     }
 
     /**
-     * Mode 2 — Recherche par hash (pas de référence fournie).
+     * Mode 2 : Recherche par hash (pas de référence fournie).
      * Retourne AUTHENTIQUE si un enregistrement actif correspond, INCONNU sinon.
      */
     private VerificationResponse verifyByHash(String uploadedHash) {

@@ -108,7 +108,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
           metadata.geolocLat = pos.coords.latitude;
           metadata.geolocLng = pos.coords.longitude;
         } catch {
-          // Géoloc refusée ou timeout — on continue sans
+          // Géoloc refusée ou timeout : on continue sans
         }
       }
 
@@ -149,7 +149,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
         </p>
       </div>
 
-      {/* Viewfinder — fond noir intentionnel, pas de dark override */}
+      {/* Viewfinder : fond noir intentionnel, pas de dark override */}
       <div className="relative bg-black rounded-2xl overflow-hidden aspect-video">
         <video
           ref={videoRef}

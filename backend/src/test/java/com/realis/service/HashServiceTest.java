@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("HashService — calcul SHA-256")
+@DisplayName("HashService : calcul SHA-256")
 class HashServiceTest {
 
     private HashService hashService;

@@ -16,7 +16,7 @@ public class NoOpTimestampAuthority implements TimestampAuthority {
 
     @Override
     public TimestampToken timestamp(byte[] sha256Bytes) {
-        // Jeton vide — l'horodatage sera remplacé par FreeTSA à l'incrément c
+        // Jeton vide : l'horodatage sera remplacé par FreeTSA à l'incrément c
         return new TimestampToken(new byte[0], Instant.now(), NO_OP_URL);
     }
 
@@ -25,7 +25,7 @@ public class NoOpTimestampAuthority implements TimestampAuthority {
         return new TsaVerificationResult(
             false,
             null,
-            "Jeton TSA non disponible (no-op — incrément c requis pour l'horodatage réel)"
+            "Jeton TSA non disponible (no-op, incrément c requis pour l'horodatage réel)"
         );
     }
 }

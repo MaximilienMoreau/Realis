@@ -16,7 +16,7 @@ public class HashService {
 
     /**
      * Calcule le SHA-256 d'un flux entrant et copie simultanément les octets vers dest.
-     * Une seule lecture du flux — pas de chargement en mémoire.
+     * Une seule lecture du flux : pas de chargement en mémoire.
      *
      * Le hash porte sur les octets bruts tels qu'ils arrivent, sans aucun ré-encodage.
      *
@@ -37,7 +37,7 @@ public class HashService {
 
     /**
      * Calcule le SHA-256 d'un flux sans copier les octets (utilisé pour la vérification).
-     * Aucune écriture disque — uniquement lecture + hash.
+     * Aucune écriture disque : uniquement lecture + hash.
      */
     public String sha256Hex(InputStream input) throws IOException {
         MessageDigest digest = newSha256Digest();

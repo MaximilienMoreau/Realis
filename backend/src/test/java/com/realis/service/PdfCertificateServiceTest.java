@@ -13,7 +13,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 
-@DisplayName("PdfCertificateService — génération du certificat PDF")
+@DisplayName("PdfCertificateService : génération du certificat PDF")
 class PdfCertificateServiceTest {
 
     private PdfCertificateService service;
@@ -34,7 +34,7 @@ class PdfCertificateServiceTest {
             .user(user)
             .sessionId(UUID.randomUUID().toString())
             .geolocConsented(true)
-            .purposeText("État des lieux — test")
+            .purposeText("État des lieux : test")
             .retentionDays(365)
             .build();
 
@@ -81,12 +81,12 @@ class PdfCertificateServiceTest {
         byte[] pdf1 = service.generate(record);
         byte[] pdf2 = service.generate(record);
 
-        // Le PDF peut varier légèrement (horodatage de génération) — on vérifie juste la taille
+        // Le PDF peut varier légèrement (horodatage de génération), on vérifie juste la taille
         assertThat(pdf1.length).isCloseTo(pdf2.length, within(500));
     }
 
     @Test
-    @DisplayName("PDF sans géoloc ni device UA — ne lève pas d'exception")
+    @DisplayName("PDF sans géoloc ni device UA : ne lève pas d'exception")
     void generate_withNullOptionalFields_doesNotThrow() {
         SealedRecord minimal = SealedRecord.builder()
             .id(UUID.randomUUID())
@@ -109,7 +109,7 @@ class PdfCertificateServiceTest {
     }
 
     @Test
-    @DisplayName("PDF avec TSA no-op — ne lève pas d'exception")
+    @DisplayName("PDF avec TSA no-op : ne lève pas d'exception")
     void generate_withNoOpTsa_doesNotThrow() {
         SealedRecord noOpRecord = SealedRecord.builder()
             .id(UUID.randomUUID())

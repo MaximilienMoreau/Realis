@@ -6,7 +6,7 @@ import lombok.*;
 import java.time.Instant;
 import java.util.UUID;
 
-// Enregistrement scellé — tous les champs de preuve sont updatable=false.
+// Enregistrement scellé : tous les champs de preuve sont updatable=false.
 // Seul deletedAt peut être posé (suppression logique via endpoint dédié).
 // Un trigger PostgreSQL renforce cette immuabilité côté DB.
 @Entity
@@ -41,7 +41,7 @@ public class SealedRecord {
     @Column(name = "sha256_hex", nullable = false, updatable = false)
     private String sha256Hex;
 
-    // Jeton RFC 3161 brut (DER) — vérifiable indépendamment de Realis
+    // Jeton RFC 3161 brut (DER) : vérifiable indépendamment de Realis
     @Column(nullable = false, updatable = false, columnDefinition = "BYTEA")
     private byte[] tsaTokenDer;
 
@@ -68,7 +68,7 @@ public class SealedRecord {
     @Column(nullable = false, updatable = false)
     private String storagePath;
 
-    // Suppression logique uniquement (casse la preuve — avertissement obligatoire)
+    // Suppression logique uniquement (casse la preuve, avertissement obligatoire)
     @Setter
     private Instant deletedAt;
 }

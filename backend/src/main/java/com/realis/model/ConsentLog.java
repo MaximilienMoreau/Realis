@@ -9,7 +9,7 @@ import lombok.AllArgsConstructor;
 import java.time.Instant;
 import java.util.UUID;
 
-// Enregistrement immuable — pas d'UPDATE autorisé (contrainte DB + updatable=false)
+// Enregistrement immuable : pas d'UPDATE autorisé (contrainte DB + updatable=false)
 @Entity
 @Table(name = "consent_logs")
 @Getter

@@ -27,10 +27,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Tests critiques de la vérification — couvre les trois verdicts attendus par le DoD.
+ * Tests critiques de la vérification : couvre les trois verdicts attendus par le DoD.
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("VerificationService — verdicts AUTHENTIQUE / ALTÉRÉ / INCONNU")
+@DisplayName("VerificationService : verdicts AUTHENTIQUE / ALTÉRÉ / INCONNU")
 class VerificationServiceTest {
 
     // HashService sans dépendances : implémentation réelle (pas de mock)
@@ -82,10 +82,10 @@ class VerificationServiceTest {
             .build();
     }
 
-    // ── Cas 1 : AUTHENTIQUE — même fichier, recherche par hash ───────────────
+    // ── Cas 1 : AUTHENTIQUE, même fichier, recherche par hash ───────────────
 
     @Test
-    @DisplayName("DoD ✓ — Même fichier re-soumis (sans recordId) → AUTHENTIQUE")
+    @DisplayName("DoD ✓ : Même fichier re-soumis (sans recordId) → AUTHENTIQUE")
     void verify_sameFile_noRecordId_returnsAuthentique() throws IOException {
         when(repo.findActiveBySha256Hex(any())).thenReturn(Optional.of(sealedRecord));
 
@@ -100,7 +100,7 @@ class VerificationServiceTest {
         assertThat(result.record()).isNotNull();
     }
 
-    // ── Cas 2 : AUTHENTIQUE — même fichier avec recordId ─────────────────────
+    // ── Cas 2 : AUTHENTIQUE, même fichier avec recordId ─────────────────────
 
     @Test
     @DisplayName("Même fichier + recordId fourni → AUTHENTIQUE")
@@ -116,10 +116,10 @@ class VerificationServiceTest {
         assertThat(result.integrityCheck().passed()).isTrue();
     }
 
-    // ── Cas 3 : ALTÉRÉ — 1 octet modifié, recordId fourni ───────────────────
+    // ── Cas 3 : ALTÉRÉ, 1 octet modifié, recordId fourni ───────────────────
 
     @Test
-    @DisplayName("DoD ✓ — 1 octet altéré + recordId → ALTÉRÉ")
+    @DisplayName("DoD ✓ : 1 octet altéré + recordId → ALTÉRÉ")
     void verify_alteredFile_withRecordId_returnsAltere() throws IOException {
         when(repo.findById(recordId)).thenReturn(Optional.of(sealedRecord));
 
@@ -136,10 +136,10 @@ class VerificationServiceTest {
         assertThat(result.record()).isNotNull();
     }
 
-    // ── Cas 4 : INCONNU — hash inconnu, aucun recordId ───────────────────────
+    // ── Cas 4 : INCONNU, hash inconnu, aucun recordId ───────────────────────
 
     @Test
-    @DisplayName("DoD ✓ — Hash inconnu (sans recordId) → INCONNU")
+    @DisplayName("DoD ✓ : Hash inconnu (sans recordId) → INCONNU")
     void verify_unknownHash_noRecordId_returnsInconnu() throws IOException {
         when(repo.findActiveBySha256Hex(any())).thenReturn(Optional.empty());
 

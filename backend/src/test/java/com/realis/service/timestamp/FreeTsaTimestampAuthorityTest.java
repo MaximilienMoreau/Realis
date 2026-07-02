@@ -45,7 +45,7 @@ import static org.assertj.core.api.Assertions.*;
  *  - Détection de hash altéré (fichier modifié après scellement)
  *  - Rejet d'un jeton corrompu
  */
-@DisplayName("FreeTsaTimestampAuthority — vérification RFC 3161")
+@DisplayName("FreeTsaTimestampAuthority : vérification RFC 3161")
 class FreeTsaTimestampAuthorityTest {
 
     // Jeton généré avec la TSA auto-signée de test
@@ -166,7 +166,7 @@ class FreeTsaTimestampAuthorityTest {
     }
 
     /**
-     * Test d'intégration réseau — désactivé par défaut (nécessite FreeTSA accessible).
+     * Test d'intégration réseau : désactivé par défaut (nécessite FreeTSA accessible).
      * Lancer manuellement avec : mvn test -Dtest=FreeTsaTimestampAuthorityTest#timestamp_realFreeTsa
      */
     @Test

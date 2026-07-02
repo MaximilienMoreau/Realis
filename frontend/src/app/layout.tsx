@@ -3,7 +3,7 @@ import "./globals.css";
 import ThemeToggle from "@/components/ThemeToggle";
 
 export const metadata: Metadata = {
-  title: "Realis — Certification du réel",
+  title: "Realis : Certification du réel",
   description:
     "Certifiez l'authenticité de vos captures par horodatage cryptographique RFC 3161. Preuve d'intégrité et d'antériorité.",
   manifest: "/manifest.json",
