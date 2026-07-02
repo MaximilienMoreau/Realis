@@ -119,7 +119,7 @@ export async function sealCapture(params: {
 }
 
 export async function getSealRecord(id: string): Promise<SealResponse> {
-  const res = await fetch(`${API_URL}/api/seal/${id}`);
+  const res = await fetch(`${API_URL}/api/verify/${id}`);
   if (!res.ok) throw new Error("Enregistrement introuvable");
   return res.json();
 }
