@@ -22,6 +22,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -118,6 +119,16 @@ public class SealingService {
             throw new SecurityException("Accès refusé");
         }
         return SealResponse.from(record);
+    }
+
+    /**
+     * Liste les scellements actifs du propriétaire, du plus récent au plus ancien.
+     */
+    @Transactional(readOnly = true)
+    public List<SealResponse> listForOwner(UUID requestingUserId) {
+        return sealedRecordRepository.findActiveByUserId(requestingUserId).stream()
+            .map(SealResponse::from)
+            .toList();
     }
 
     /**

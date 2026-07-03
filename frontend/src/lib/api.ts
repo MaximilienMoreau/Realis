@@ -125,7 +125,23 @@ export async function getSealRecord(id: string): Promise<SealResponse> {
 }
 
 export function certificateUrl(id: string): string {
-  return `${API_URL}/api/seal/${id}/certificate`;
+  return `${API_URL}/api/verify/${id}/certificate`;
+}
+
+export async function listMySeals(): Promise<SealResponse[]> {
+  const token = getToken();
+  if (!token) throw new AuthExpiredError();
+
+  const res = await fetch(`${API_URL}/api/seal`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) {
+    clearAuth();
+    throw new AuthExpiredError();
+  }
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message ?? "Erreur lors du chargement des preuves");
+  return data as SealResponse[];
 }
 
 // ── Vérification ──────────────────────────────────────────────────────────────

@@ -27,6 +27,7 @@ basé sur un hash SHA-256 et un horodatage cryptographique RFC 3161 (TSP).
 
 - [Démarrage rapide](#démarrage-rapide)
 - [Architecture](#architecture)
+- [Endpoints principaux](#endpoints-principaux)
 - [Développement local](#développement-local-sans-docker)
 - [Vérification indépendante d'un jeton TSA](#vérification-indépendante-dun-jeton-tsa)
 - [RGPD](#rgpd)
@@ -123,6 +124,32 @@ Caméra → blob vidéo → upload backend
 
 <br>
 
+## Endpoints principaux
+
+<div align="center">
+
+| Méthode | Route | Auth | Description |
+|:---|:---|:---|:---|
+| `POST` | `/api/auth/register` | — | Création de compte |
+| `POST` | `/api/auth/login` | — | Connexion |
+| `POST` | `/api/seal` | JWT | Scelle une capture (multipart) |
+| `GET` | `/api/seal` | JWT | Liste les scellements de l'utilisateur connecté |
+| `GET` | `/api/seal/{id}` | JWT, propriétaire | Détail d'un scellement |
+| `DELETE` | `/api/seal/{id}` | JWT, propriétaire | Suppression logique (invalide la preuve) |
+| `POST` | `/api/verify` | — | Vérifie un fichier (verdict AUTHENTIQUE / ALTÉRÉ / INCONNU) |
+| `GET` | `/api/verify/{id}` | — | Métadonnées publiques d'un scellement |
+| `GET` | `/api/verify/{id}/tsa` | — | Jeton RFC 3161 brut (`.tsr`) |
+| `GET` | `/api/verify/{id}/certificate` | — | Certificat PDF (lien partageable) |
+| `GET` | `/api/health` | — | Healthcheck |
+
+</div>
+
+`/api/auth/**` et `/api/verify/**` sont publics par conception — la page de
+vérification et le certificat PDF doivent être consultables sans compte, via un
+simple lien. `/api/seal/**` (hors scellement en lui-même) exige un JWT.
+
+<br>
+
 ## Développement local (sans Docker)
 
 ### Backend
@@ -170,6 +197,9 @@ openssl ts -verify -in token.tsr -data fichier_original.webm \
 - Les captures sont chiffrées at rest (AES-256-GCM).
 - Endpoint de suppression logique disponible (avec avertissement : la suppression invalide la preuve).
 - Minimisation des données : seuls les champs nécessaires à la preuve sont collectés.
+- Rate-limiting basique (10 requêtes/minute/IP) sur `/api/auth/login` et
+  `/api/auth/register` pour limiter le bruteforce (en mémoire, mono-instance —
+  à remplacer par un backend partagé type Redis en cas de scale-out).
 
 <br>
 
