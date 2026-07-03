@@ -2,6 +2,10 @@ package com.realis.controller;
 
 import com.realis.dto.SealResponse;
 import com.realis.dto.VerificationResponse;
+import com.realis.exception.ResourceNotFoundException;
+import com.realis.model.SealedRecord;
+import com.realis.repository.SealedRecordRepository;
+import com.realis.service.PdfCertificateService;
 import com.realis.service.VerificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
@@ -21,6 +25,7 @@ import java.util.UUID;
  * POST /api/verify                → verdict sur un fichier uploadé
  * GET  /api/verify/{id}           → métadonnées publiques d'un enregistrement
  * GET  /api/verify/{id}/tsa       → jeton TSA brut (DER) pour vérification indépendante
+ * GET  /api/verify/{id}/certificate → certificat PDF (lien partageable)
  */
 @RestController
 @RequestMapping("/api/verify")
@@ -28,6 +33,8 @@ import java.util.UUID;
 public class VerificationController {
 
     private final VerificationService verificationService;
+    private final PdfCertificateService pdfCertificateService;
+    private final SealedRecordRepository sealedRecordRepository;
 
     /**
      * Vérifie l'intégrité et l'horodatage d'un fichier.
@@ -79,7 +86,7 @@ public class VerificationController {
         byte[] tokenDer = verificationService.getTsaToken(id);
 
         if (tokenDer.length == 0) {
-            throw new IllegalStateException(
+            throw new ResourceNotFoundException(
                 "Aucun jeton TSA disponible pour cet enregistrement (horodatage no-op)"
             );
         }
@@ -94,5 +101,28 @@ public class VerificationController {
         headers.setContentLength(tokenDer.length);
 
         return new ResponseEntity<>(tokenDer, headers, HttpStatus.OK);
+    }
+
+    /**
+     * Génère et retourne le certificat PDF à la demande (non stocké, toujours frais depuis la DB).
+     * Public : c'est un lien partageable (aucun header Authorization possible sur un <a href download>).
+     */
+    @GetMapping("/{id}/certificate")
+    public ResponseEntity<byte[]> getCertificate(@PathVariable UUID id) throws IOException {
+        SealedRecord record = sealedRecordRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Enregistrement introuvable : " + id));
+
+        byte[] pdfBytes = pdfCertificateService.generate(record);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(
+            ContentDisposition.attachment()
+                .filename("certificat-realis-" + id + ".pdf")
+                .build()
+        );
+        headers.setContentLength(pdfBytes.length);
+
+        return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
     }
 }

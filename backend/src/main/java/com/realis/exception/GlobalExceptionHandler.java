@@ -61,6 +61,12 @@ public class GlobalExceptionHandler {
             .body(ErrorResponse.of(413, "Payload Too Large", "Fichier trop volumineux (limite : 500 Mo)"));
     }
 
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyRequests(TooManyRequestsException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .body(ErrorResponse.of(429, "Too Many Requests", ex.getMessage()));
+    }
+
     @ExceptionHandler(TimestampException.class)
     public ResponseEntity<ErrorResponse> handleTimestamp(TimestampException ex) {
         log.error("Erreur TSA : {}", ex.getMessage(), ex);

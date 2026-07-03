@@ -150,6 +150,13 @@ function AuthStep({ onAuth }: { onAuth: () => void }) {
         >
           Continuer
         </button>
+        <a
+          href="/mes-preuves"
+          className="block w-full py-2.5 text-center text-sm border border-gray-200 dark:border-gray-700
+                     text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors"
+        >
+          Voir mes preuves
+        </a>
         <button
           type="button"
           onClick={() => { clearAuth(); window.location.reload(); }}

@@ -16,9 +16,11 @@ RUN apk add --no-cache curl
 
 WORKDIR /app
 
-# Certificat TSA FreeTSA (embarqué pour la vérification offline)
+# Certificat TSA FreeTSA (embarqué pour la vérification offline).
+# Le répertoire source est versionné (même vide) : sinon COPY échoue au build,
+# car cette instruction n'est pas interprétée par un shell (pas de fallback "|| true" possible).
 RUN mkdir -p /app/tsa-certs
-COPY --from=builder /build/src/main/resources/tsa-certs/ /app/tsa-certs/ 2>/dev/null || true
+COPY --from=builder /build/src/main/resources/tsa-certs/ /app/tsa-certs/
 
 COPY --from=builder /build/target/realis-backend-*.jar app.jar
 

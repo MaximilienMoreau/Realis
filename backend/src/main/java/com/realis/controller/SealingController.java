@@ -2,15 +2,9 @@ package com.realis.controller;
 
 import com.realis.dto.SealRequest;
 import com.realis.dto.SealResponse;
-import com.realis.exception.ResourceNotFoundException;
-import com.realis.model.SealedRecord;
-import com.realis.repository.SealedRecordRepository;
-import com.realis.service.PdfCertificateService;
 import com.realis.service.SealingService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -27,8 +22,6 @@ import java.util.UUID;
 public class SealingController {
 
     private final SealingService sealingService;
-    private final PdfCertificateService pdfCertificateService;
-    private final SealedRecordRepository sealedRecordRepository;
 
     /**
      * Scelle une capture :
@@ -62,26 +55,12 @@ public class SealingController {
     }
 
     /**
-     * Génère et retourne le certificat PDF à la demande.
-     * Accessible sans authentification (lien partageable).
+     * Liste les scellements actifs de l'utilisateur connecté (le plus récent en premier).
      */
-    @GetMapping("/{id}/certificate")
-    public ResponseEntity<byte[]> getCertificate(@PathVariable UUID id) throws IOException {
-        SealedRecord record = sealedRecordRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Enregistrement introuvable : " + id));
-
-        byte[] pdfBytes = pdfCertificateService.generate(record);
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_PDF);
-        headers.setContentDisposition(
-            ContentDisposition.attachment()
-                .filename("certificat-realis-" + id + ".pdf")
-                .build()
-        );
-        headers.setContentLength(pdfBytes.length);
-
-        return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+    @GetMapping
+    public ResponseEntity<List<SealResponse>> list(Authentication authentication) {
+        UUID userId = (UUID) authentication.getPrincipal();
+        return ResponseEntity.ok(sealingService.listForOwner(userId));
     }
 
     /**
