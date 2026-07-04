@@ -37,11 +37,12 @@ public class AuthController {
         HttpServletRequest httpRequest
     ) {
         checkRateLimit("register", httpRequest);
-        if (userRepository.existsByEmail(request.email())) {
+        String email = normalizeEmail(request.email());
+        if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Un compte existe déjà pour cet email");
         }
         User user = User.builder()
-            .email(request.email())
+            .email(email)
             .passwordHash(passwordEncoder.encode(request.password()))
             .build();
         user = userRepository.save(user);
@@ -56,7 +57,7 @@ public class AuthController {
         HttpServletRequest httpRequest
     ) {
         checkRateLimit("login", httpRequest);
-        User user = userRepository.findByEmail(request.email())
+        User user = userRepository.findByEmail(normalizeEmail(request.email()))
             .orElseThrow(() -> new BadCredentialsException("Identifiants invalides"));
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new BadCredentialsException("Identifiants invalides");
@@ -70,5 +71,11 @@ public class AuthController {
         if (!rateLimiter.tryAcquire(key, MAX_ATTEMPTS_PER_MINUTE)) {
             throw new TooManyRequestsException("Trop de tentatives, réessayez dans une minute.");
         }
+    }
+
+    // Évite que "Test@Mail.com" et "test@mail.com" soient traités comme deux comptes
+    // distincts (la colonne users.email est UNIQUE mais sensible à la casse en base).
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

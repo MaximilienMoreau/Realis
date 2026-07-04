@@ -39,6 +39,7 @@ services:
       TSA_PROVIDER: ${TSA_PROVIDER}
       TSA_URL: ${TSA_URL}
       TSA_CERT_PATH: ${TSA_CERT_PATH}
+      FRONTEND_URL: ${FRONTEND_URL}
     volumes:
       - captures_data:/data/captures
     ports:

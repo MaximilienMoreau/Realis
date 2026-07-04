@@ -16,7 +16,9 @@ import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Table;
 import com.itextpdf.layout.properties.TextAlignment;
 import com.itextpdf.layout.properties.UnitValue;
+import com.realis.config.AppProperties;
 import com.realis.model.SealedRecord;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -38,7 +40,10 @@ import java.time.format.DateTimeFormatter;
  *  - Lien et commande openssl pour vérification indépendante
  */
 @Service
+@RequiredArgsConstructor
 public class PdfCertificateService {
+
+    private final AppProperties appProperties;
 
     // Palette Realis
     private static final Color REALIS_DARK   = new DeviceRgb(13,  28,  82);
@@ -48,6 +53,8 @@ public class PdfCertificateService {
     private static final Color BORDER_COLOR  = new DeviceRgb(200, 210, 235);
     private static final Color WARNING_BG    = new DeviceRgb(255, 249, 219);
     private static final Color WARNING_BORDER = new DeviceRgb(200, 160, 0);
+    private static final Color DELETED_BG     = new DeviceRgb(255, 235, 235);
+    private static final Color DELETED_BORDER = new DeviceRgb(200, 60, 60);
     private static final Color MONO_COLOR    = new DeviceRgb(40,  60,  100);
     private static final Color GRAY_TEXT     = new DeviceRgb(100, 110, 130);
 
@@ -72,6 +79,11 @@ public class PdfCertificateService {
 
         doc.add(referenceBar(record, regular, mono));
         doc.add(spacer(12));
+
+        if (record.getDeletedAt() != null) {
+            doc.add(deletionWarning(record, bold, regular));
+            doc.add(spacer(12));
+        }
 
         doc.add(sectionTitle("IDENTIFICATION", bold));
         doc.add(fieldsTable(bold, regular)
@@ -168,6 +180,29 @@ public class PdfCertificateService {
         return new Paragraph("").setMarginBottom(height).setMarginTop(0);
     }
 
+    /** Bandeau rouge signalant qu'un enregistrement a été supprimé logiquement (preuve invalidée). */
+    private Table deletionWarning(SealedRecord record, PdfFont bold, PdfFont regular) throws IOException {
+        Table t = new Table(UnitValue.createPercentArray(new float[]{100}))
+            .setWidth(UnitValue.createPercentValue(100));
+
+        Cell cell = new Cell()
+            .setBackgroundColor(DELETED_BG)
+            .setBorder(new SolidBorder(DELETED_BORDER, 1))
+            .setPaddingLeft(12).setPaddingRight(12)
+            .setPaddingTop(10).setPaddingBottom(10);
+
+        cell.add(new Paragraph("ENREGISTREMENT SUPPRIMÉ")
+            .setFont(bold).setFontSize(8).setFontColor(DELETED_BORDER)
+            .setMarginBottom(4));
+        cell.add(new Paragraph(
+            "Cet enregistrement a été supprimé le " + DATE_FMT.format(record.getDeletedAt()) +
+            ". La preuve d'intégrité et d'antériorité ne peut plus être garantie par Realis."
+        ).setFont(regular).setFontSize(8).setFontColor(new DeviceRgb(120, 30, 30)));
+
+        t.addCell(cell);
+        return t;
+    }
+
     /** Avertissement légal, exigence spec : visible et précis. */
     private Table legalWarning(PdfFont bold, PdfFont regular) throws IOException {
         Table t = new Table(UnitValue.createPercentArray(new float[]{100}))
@@ -210,7 +245,7 @@ public class PdfCertificateService {
 
         cell.add(new Paragraph("Page de vérification en ligne :")
             .setFont(regular).setFontSize(8).setMarginBottom(2));
-        cell.add(new Paragraph("https://realis.app/verifier/" + record.getId())
+        cell.add(new Paragraph(appProperties.frontendUrl() + "/verifier?recordId=" + record.getId())
             .setFont(mono).setFontSize(8).setFontColor(REALIS_BLUE)
             .setMarginBottom(8));
 

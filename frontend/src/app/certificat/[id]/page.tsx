@@ -124,8 +124,8 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
               <pre className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-xs text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap">
                 {`openssl ts -verify \\
   -in realis-tsa-${record.id}.tsr \\
-  -digest ${record.sha256Hex.slice(0, 16)}… \\
-  -CAfile freetsa.crt`}
+  -data ${record.fileName} \\
+  -CAfile freetsa-ca.crt`}
               </pre>
               <a
                 href={`/api/verify/${record.id}/tsa`}

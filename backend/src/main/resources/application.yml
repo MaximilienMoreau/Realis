@@ -49,6 +49,9 @@ management:
       show-details: never
 
 realis:
+  app:
+    frontend-url: ${FRONTEND_URL:https://realis.app}
+
   jwt:
     secret: ${JWT_SECRET}
     expiration-ms: 86400000       # 24h

@@ -193,10 +193,10 @@ class VerificationServiceTest {
         assertThat(withId.uploadedSha256()).isEqualTo(withoutId.uploadedSha256());
     }
 
-    // ── Cas 7 : fichier supprimé logiquement ─────────────────────────────────
+    // ── Cas 7 : fichier supprimé logiquement, recherche par hash ─────────────
 
     @Test
-    @DisplayName("Enregistrement supprimé (deletedAt != null) → AUTHENTIQUE mais avec avertissement")
+    @DisplayName("Enregistrement supprimé (deletedAt != null), sans recordId → INCONNU")
     void verify_deletedRecord_byHash_notReturnedByRepo() throws IOException {
         // findActiveBySha256Hex filtre les enregistrements supprimés (WHERE deleted_at IS NULL)
         when(repo.findActiveBySha256Hex(any())).thenReturn(Optional.empty());
@@ -208,5 +208,28 @@ class VerificationServiceTest {
 
         // Un enregistrement supprimé n'apparaît plus dans la recherche par hash → INCONNU
         assertThat(result.verdict()).isEqualTo(Verdict.INCONNU);
+    }
+
+    // ── Cas 8 : fichier supprimé logiquement, recherche par recordId ─────────
+
+    @Test
+    @DisplayName("Enregistrement supprimé (deletedAt != null), avec recordId → AUTHENTIQUE mais avec avertissement")
+    void verify_deletedRecord_withRecordId_returnsAuthentiqueWithWarning() throws IOException {
+        // Contrairement à findActiveBySha256Hex, findById ne filtre pas deletedAt :
+        // le hash cryptographique reste valide même après une suppression logique.
+        // C'est SealResponse.warning (porté par le record) qui signale la suppression au client.
+        sealedRecord.setDeletedAt(Instant.now());
+        when(repo.findById(recordId)).thenReturn(Optional.of(sealedRecord));
+
+        MockMultipartFile file = new MockMultipartFile("file", "video.webm",
+            "video/webm", ORIGINAL_BYTES);
+
+        VerificationResponse result = service.verify(file, recordId);
+
+        assertThat(result.verdict()).isEqualTo(Verdict.AUTHENTIQUE);
+        assertThat(result.integrityCheck().passed()).isTrue();
+        assertThat(result.record()).isNotNull();
+        assertThat(result.record().deleted()).isTrue();
+        assertThat(result.record().warning()).isNotNull();
     }
 }

@@ -1,3 +1,7 @@
+// L'URL de l'API backend est injectée au build (ARG Docker) et doit rester
+// autorisée par la CSP, quel que soit le domaine de déploiement réel.
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   async headers() {
@@ -19,7 +23,7 @@ const nextConfig = {
               "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
               "style-src 'self' 'unsafe-inline'",
               "media-src 'self' blob:",
-              "connect-src 'self' http://localhost:8080 https://api.realis.app",
+              `connect-src 'self' ${apiUrl}`,
               "img-src 'self' data:",
             ].join("; "),
           },
