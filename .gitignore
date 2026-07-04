@@ -9,6 +9,7 @@ frontend/node_modules/
 frontend/.next/
 frontend/out/
 frontend/.pnpm-store/
+frontend/tsconfig.tsbuildinfo
 
 # Java / Maven
 backend/target/

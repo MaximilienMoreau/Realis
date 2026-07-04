@@ -144,6 +144,27 @@ export async function listMySeals(): Promise<SealResponse[]> {
   return data as SealResponse[];
 }
 
+/**
+ * Suppression logique : invalide définitivement la preuve.
+ * Réservé au propriétaire (JWT requis).
+ */
+export async function deleteSeal(id: string): Promise<SealResponse> {
+  const token = getToken();
+  if (!token) throw new AuthExpiredError();
+
+  const res = await fetch(`${API_URL}/api/seal/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) {
+    clearAuth();
+    throw new AuthExpiredError();
+  }
+  const data = await parseJsonSafe(res);
+  if (!res.ok) throw new Error(data.message ?? "Erreur lors de la suppression");
+  return data as SealResponse;
+}
+
 // ── Vérification ──────────────────────────────────────────────────────────────
 
 export async function verifyFile(

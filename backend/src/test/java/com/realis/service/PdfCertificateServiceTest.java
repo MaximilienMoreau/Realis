@@ -1,5 +1,6 @@
 package com.realis.service;
 
+import com.realis.config.AppProperties;
 import com.realis.model.ConsentLog;
 import com.realis.model.SealedRecord;
 import com.realis.model.User;
@@ -21,7 +22,7 @@ class PdfCertificateServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PdfCertificateService();
+        service = new PdfCertificateService(new AppProperties("https://realis.app"));
 
         User user = User.builder()
             .id(UUID.randomUUID())
@@ -126,5 +127,34 @@ class PdfCertificateServiceTest {
             .build();
 
         assertThatNoException().isThrownBy(() -> service.generate(noOpRecord));
+    }
+
+    @Test
+    @DisplayName("PDF d'un enregistrement supprimé : contient un avertissement de suppression")
+    void generate_deletedRecord_includesDeletionWarning() throws IOException {
+        record.setDeletedAt(Instant.parse("2026-07-01T00:00:00Z"));
+
+        byte[] pdf = service.generate(record);
+
+        assertThat(extractText(pdf)).contains("ENREGISTREMENT SUPPRIMÉ");
+    }
+
+    @Test
+    @DisplayName("PDF d'un enregistrement non supprimé : pas d'avertissement de suppression")
+    void generate_activeRecord_hasNoDeletionWarning() throws IOException {
+        byte[] pdf = service.generate(record);
+
+        assertThat(extractText(pdf)).doesNotContain("ENREGISTREMENT SUPPRIMÉ");
+    }
+
+    private static String extractText(byte[] pdfBytes) throws IOException {
+        try (var reader = new com.itextpdf.kernel.pdf.PdfReader(new java.io.ByteArrayInputStream(pdfBytes));
+             var pdf = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 1; i <= pdf.getNumberOfPages(); i++) {
+                sb.append(com.itextpdf.kernel.pdf.canvas.parser.PdfTextExtractor.getTextFromPage(pdf.getPage(i)));
+            }
+            return sb.toString();
+        }
     }
 }

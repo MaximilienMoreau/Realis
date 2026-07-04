@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { listMySeals, AuthExpiredError, type SealResponse } from "@/lib/api";
+import { listMySeals, deleteSeal, AuthExpiredError, type SealResponse } from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
 
 export default function MesPreuvesPage() {
-  const [records, setRecords] = useState<SealResponse[] | null>(null);
-  const [error, setError]     = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [records, setRecords]           = useState<SealResponse[] | null>(null);
+  const [error, setError]               = useState<string | null>(null);
+  const [loading, setLoading]           = useState(true);
+  const [deletingId, setDeletingId]     = useState<string | null>(null);
+  const [deleteError, setDeleteError]   = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated()) {
@@ -20,6 +22,24 @@ export default function MesPreuvesPage() {
       .catch((err) => setError(err instanceof AuthExpiredError ? err.message : "Erreur lors du chargement"))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleDelete = async (id: string, fileName: string) => {
+    if (!window.confirm(
+      `Supprimer définitivement la preuve « ${fileName} » ?\n\n` +
+      "Cette action invalide la preuve d'intégrité et ne peut pas être annulée."
+    )) return;
+
+    setDeleteError(null);
+    setDeletingId(id);
+    try {
+      await deleteSeal(id);
+      setRecords((prev) => prev?.filter((r) => r.id !== id) ?? null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Erreur lors de la suppression");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10 px-4">
@@ -55,24 +75,40 @@ export default function MesPreuvesPage() {
           </div>
         )}
 
+        {deleteError && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-sm">
+            {deleteError}
+          </div>
+        )}
+
         {records && records.length > 0 && (
           <ul className="space-y-3">
             {records.map((r) => (
-              <li key={r.id}>
-                <a
-                  href={`/certificat/${r.id}`}
-                  className="block bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700
-                             shadow-sm p-4 hover:border-realis-300 dark:hover:border-realis-600 transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
+              <li
+                key={r.id}
+                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700
+                           shadow-sm p-4 hover:border-realis-300 dark:hover:border-realis-600 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <a href={`/certificat/${r.id}`} className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${r.tsaActive ? "bg-green-500" : "bg-amber-400"}`} />
                       <p className="font-medium text-sm text-realis-700 dark:text-realis-300 truncate">{r.fileName}</p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">{fmt(r.sealedAt)}</p>
                     </div>
-                    <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${r.tsaActive ? "bg-green-500" : "bg-amber-400"}`} />
-                  </div>
-                  <p className="mt-2 font-mono text-[11px] text-gray-400 dark:text-gray-500 break-all">{r.sha256Hex}</p>
-                </a>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{fmt(r.sealedAt)}</p>
+                    <p className="mt-2 font-mono text-[11px] text-gray-400 dark:text-gray-500 break-all">{r.sha256Hex}</p>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(r.id, r.fileName)}
+                    disabled={deletingId === r.id}
+                    title="Supprimer définitivement cette preuve"
+                    className="flex-shrink-0 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300
+                               disabled:opacity-40 transition-colors"
+                  >
+                    {deletingId === r.id ? "…" : "Supprimer"}
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
