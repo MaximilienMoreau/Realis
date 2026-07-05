@@ -2,6 +2,7 @@ package com.realis.service;
 
 import com.realis.dto.SealRequest;
 import com.realis.dto.SealResponse;
+import com.realis.exception.ConflictException;
 import com.realis.exception.ResourceNotFoundException;
 import com.realis.model.ConsentLog;
 import com.realis.model.SealedRecord;
@@ -206,15 +207,15 @@ class SealingServiceTest {
     }
 
     @Test
-    @DisplayName("softDelete() : déjà supprimé → IllegalStateException")
-    void softDelete_alreadyDeleted_throwsIllegalStateException() {
+    @DisplayName("softDelete() : déjà supprimé → ConflictException")
+    void softDelete_alreadyDeleted_throwsConflictException() {
         UUID recordId = UUID.randomUUID();
         SealedRecord record = buildRecord(recordId, user);
         record.setDeletedAt(Instant.now());
         when(sealedRecordRepository.findById(recordId)).thenReturn(Optional.of(record));
 
         assertThatThrownBy(() -> service.softDelete(recordId, userId))
-            .isInstanceOf(IllegalStateException.class);
+            .isInstanceOf(ConflictException.class);
     }
 
     // ── Utilitaires ───────────────────────────────────────────────────────

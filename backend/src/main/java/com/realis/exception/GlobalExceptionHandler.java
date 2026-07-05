@@ -3,6 +3,7 @@ package com.realis.exception;
 import com.realis.dto.ErrorResponse;
 import com.realis.service.timestamp.TimestampException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -33,10 +34,19 @@ public class GlobalExceptionHandler {
             .body(ErrorResponse.of(403, "Forbidden", "Accès refusé"));
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ErrorResponse> handleIllegalState(IllegalStateException ex) {
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(ConflictException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(ErrorResponse.of(409, "Conflict", ex.getMessage()));
+    }
+
+    // Course d'inscription (deux requêtes concurrentes sur le même email) : la contrainte
+    // UNIQUE de la base est la garantie ultime, le contrôleur ne fait qu'un check optimiste.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.warn("Contrainte d'intégrité violée : {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(ErrorResponse.of(409, "Conflict", "Un compte existe déjà pour cet email"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -56,11 +56,11 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
     streamRef.current = null;
   };
 
-  const activateCamera = async () => {
+  const activateCamera = async (useBack: boolean = facingBack) => {
     setState("requesting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facingBack ? "environment" : "user" },
+        video: { facingMode: useBack ? "environment" : "user" },
         audio: false,
       });
       streamRef.current = stream;
@@ -134,10 +134,13 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
   };
 
   const toggleCamera = async () => {
-    setFacingBack((v) => !v);
+    const next = !facingBack;
+    setFacingBack(next);
     stopStream();
     setState("idle");
-    setTimeout(() => activateCamera(), 200);
+    // On passe `next` explicitement : `activateCamera` par défaut lirait `facingBack`
+    // depuis la closure de ce rendu, donc encore l'ancienne valeur au moment du timeout.
+    setTimeout(() => activateCamera(next), 200);
   };
 
   return (
@@ -202,7 +205,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
         {state === "idle" && (
           <button
             type="button"
-            onClick={activateCamera}
+            onClick={() => activateCamera()}
             className="flex-1 py-3 bg-realis-600 hover:bg-realis-700 text-white font-medium rounded-xl transition-colors"
           >
             Activer la caméra

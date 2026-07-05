@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -90,9 +91,12 @@ public class VerificationService {
     /**
      * Mode 2 : Recherche par hash (pas de référence fournie).
      * Retourne AUTHENTIQUE si un enregistrement actif correspond, INCONNU sinon.
+     *
+     * Le hash n'étant pas unique en base (deux scellements peuvent porter sur un contenu
+     * identique), on retient le plus récent des enregistrements actifs correspondants.
      */
     private VerificationResponse verifyByHash(String uploadedHash) {
-        Optional<SealedRecord> found = sealedRecordRepository.findActiveBySha256Hex(uploadedHash);
+        List<SealedRecord> found = sealedRecordRepository.findActiveBySha256Hex(uploadedHash);
 
         if (found.isEmpty()) {
             return new VerificationResponse(
@@ -106,7 +110,7 @@ public class VerificationService {
             );
         }
 
-        SealedRecord record = found.get();
+        SealedRecord record = found.get(0);
         TsaCheckResult tsaCheck = buildTsaCheck(record);
 
         return new VerificationResponse(

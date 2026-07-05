@@ -2,9 +2,9 @@ import { getToken, clearAuth } from "@/lib/auth";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-// Le token a expiré ou est invalide : le backend renvoie un 401 à corps vide
-// (aucun AuthenticationEntryPoint JSON côté Spring Security), donc on ne
-// peut pas se fier à `data.message` pour ce cas précis.
+// Le token a expiré ou est invalide : le backend renvoie 401 (AuthenticationEntryPoint
+// JSON dédié côté Spring Security). On lève un message fixe côté frontend plutôt que
+// de dépendre de `data.message`, pour rester correct même si l'API change ce texte.
 export class AuthExpiredError extends Error {
   constructor() {
     super("Session expirée, veuillez vous reconnecter.");
@@ -126,6 +126,10 @@ export async function getSealRecord(id: string): Promise<SealResponse> {
 
 export function certificateUrl(id: string): string {
   return `${API_URL}/api/verify/${id}/certificate`;
+}
+
+export function tsaTokenUrl(id: string): string {
+  return `${API_URL}/api/verify/${id}/tsa`;
 }
 
 export async function listMySeals(): Promise<SealResponse[]> {

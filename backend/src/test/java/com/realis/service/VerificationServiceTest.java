@@ -19,6 +19,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -87,7 +88,7 @@ class VerificationServiceTest {
     @Test
     @DisplayName("DoD ✓ : Même fichier re-soumis (sans recordId) → AUTHENTIQUE")
     void verify_sameFile_noRecordId_returnsAuthentique() throws IOException {
-        when(repo.findActiveBySha256Hex(any())).thenReturn(Optional.of(sealedRecord));
+        when(repo.findActiveBySha256Hex(any())).thenReturn(List.of(sealedRecord));
 
         MockMultipartFile file = new MockMultipartFile("file", "video.webm",
             "video/webm", ORIGINAL_BYTES);
@@ -141,7 +142,7 @@ class VerificationServiceTest {
     @Test
     @DisplayName("DoD ✓ : Hash inconnu (sans recordId) → INCONNU")
     void verify_unknownHash_noRecordId_returnsInconnu() throws IOException {
-        when(repo.findActiveBySha256Hex(any())).thenReturn(Optional.empty());
+        when(repo.findActiveBySha256Hex(any())).thenReturn(List.of());
 
         MockMultipartFile file = new MockMultipartFile("file", "unknown.webm",
             "video/webm", "contenu jamais scellé".getBytes());
@@ -178,7 +179,7 @@ class VerificationServiceTest {
     @DisplayName("Hash SHA-256 calculé identique dans les deux chemins (avec et sans recordId)")
     void verify_hashConsistency_bothPaths() throws IOException {
         when(repo.findById(recordId)).thenReturn(Optional.of(sealedRecord));
-        when(repo.findActiveBySha256Hex(any())).thenReturn(Optional.of(sealedRecord));
+        when(repo.findActiveBySha256Hex(any())).thenReturn(List.of(sealedRecord));
 
         MockMultipartFile file = new MockMultipartFile("file", "video.webm",
             "video/webm", ORIGINAL_BYTES);
@@ -199,7 +200,7 @@ class VerificationServiceTest {
     @DisplayName("Enregistrement supprimé (deletedAt != null), sans recordId → INCONNU")
     void verify_deletedRecord_byHash_notReturnedByRepo() throws IOException {
         // findActiveBySha256Hex filtre les enregistrements supprimés (WHERE deleted_at IS NULL)
-        when(repo.findActiveBySha256Hex(any())).thenReturn(Optional.empty());
+        when(repo.findActiveBySha256Hex(any())).thenReturn(List.of());
 
         MockMultipartFile file = new MockMultipartFile("file", "video.webm",
             "video/webm", ORIGINAL_BYTES);
@@ -231,5 +232,38 @@ class VerificationServiceTest {
         assertThat(result.record()).isNotNull();
         assertThat(result.record().deleted()).isTrue();
         assertThat(result.record().warning()).isNotNull();
+    }
+
+    // ── Cas 9 : deux enregistrements actifs partagent le même hash ──────────
+
+    @Test
+    @DisplayName("Deux enregistrements actifs avec le même hash (sans recordId) → AUTHENTIQUE sur le plus récent, pas d'exception")
+    void verify_duplicateHash_noRecordId_returnsMostRecentWithoutCrashing() throws IOException {
+        SealedRecord olderDuplicate = SealedRecord.builder()
+            .id(UUID.randomUUID())
+            .user(sealedRecord.getUser())
+            .consentLog(sealedRecord.getConsentLog())
+            .fileName("video-copie.webm")
+            .fileSizeBytes(ORIGINAL_BYTES.length)
+            .mimeType("video/webm")
+            .sha256Hex(sealedRecord.getSha256Hex())
+            .tsaTokenDer(new byte[0])
+            .tsaUrl("no-op://localhost")
+            .tsaTimestamp(Instant.now().minusSeconds(3600))
+            .sealedAt(Instant.now().minusSeconds(3600))
+            .storagePath("/data/test-copie.enc")
+            .build();
+
+        // Le repository trie déjà par sealedAt DESC : le plus récent (sealedRecord) est en tête.
+        when(repo.findActiveBySha256Hex(any())).thenReturn(List.of(sealedRecord, olderDuplicate));
+
+        MockMultipartFile file = new MockMultipartFile("file", "video.webm",
+            "video/webm", ORIGINAL_BYTES);
+
+        VerificationResponse result = service.verify(file, null);
+
+        assertThat(result.verdict()).isEqualTo(Verdict.AUTHENTIQUE);
+        assertThat(result.record()).isNotNull();
+        assertThat(result.record().id()).isEqualTo(sealedRecord.getId());
     }
 }

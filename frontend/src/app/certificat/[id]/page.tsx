@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSealRecord, certificateUrl, type SealResponse } from "@/lib/api";
+import { getSealRecord, certificateUrl, tsaTokenUrl, type SealResponse } from "@/lib/api";
 
 export default function CertificatPage({ params }: { params: { id: string } }) {
   const [record, setRecord]   = useState<SealResponse | null>(null);
@@ -128,7 +128,7 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
   -CAfile freetsa-ca.crt`}
               </pre>
               <a
-                href={`/api/verify/${record.id}/tsa`}
+                href={tsaTokenUrl(record.id)}
                 download={`realis-tsa-${record.id}.tsr`}
                 className="text-xs text-realis-500 dark:text-realis-400 hover:underline"
               >
