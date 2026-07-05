@@ -147,6 +147,14 @@ class PdfCertificateServiceTest {
         assertThat(extractText(pdf)).doesNotContain("ENREGISTREMENT SUPPRIMÉ");
     }
 
+    @Test
+    @DisplayName("Le PDF public ne contient pas l'email du propriétaire (certificat/tsa sont non authentifiés)")
+    void generate_doesNotLeakOwnerEmail() throws IOException {
+        byte[] pdf = service.generate(record);
+
+        assertThat(extractText(pdf)).doesNotContain(record.getUser().getEmail());
+    }
+
     private static String extractText(byte[] pdfBytes) throws IOException {
         try (var reader = new com.itextpdf.kernel.pdf.PdfReader(new java.io.ByteArrayInputStream(pdfBytes));
              var pdf = new com.itextpdf.kernel.pdf.PdfDocument(reader)) {

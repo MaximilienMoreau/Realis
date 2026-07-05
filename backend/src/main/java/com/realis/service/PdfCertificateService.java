@@ -89,7 +89,6 @@ public class PdfCertificateService {
         doc.add(fieldsTable(bold, regular)
             .addRow("Référence",      record.getId().toString(),             regular, mono)
             .addRow("Scellé le",      DATE_FMT.format(record.getSealedAt()), regular, regular)
-            .addRow("Propriétaire",   record.getUser().getEmail(),            regular, regular)
             .table());
         doc.add(spacer(10));
 

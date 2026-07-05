@@ -2,6 +2,7 @@ package com.realis.service;
 
 import com.realis.dto.SealRequest;
 import com.realis.dto.SealResponse;
+import com.realis.exception.ConflictException;
 import com.realis.exception.ResourceNotFoundException;
 import com.realis.model.ConsentLog;
 import com.realis.model.SealedRecord;
@@ -144,7 +145,7 @@ public class SealingService {
             throw new SecurityException("Accès refusé");
         }
         if (record.getDeletedAt() != null) {
-            throw new IllegalStateException("Enregistrement déjà supprimé");
+            throw new ConflictException("Enregistrement déjà supprimé");
         }
 
         record.setDeletedAt(Instant.now());
