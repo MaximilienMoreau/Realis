@@ -46,6 +46,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/health",
+                    "/actuator/health",
                     "/api/auth/**",
                     "/api/verify/**"
                 ).permitAll()
@@ -80,7 +81,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:3000", "https://*.realis.app"));
+        // "https://*.realis.app" ne matche que les sous-domaines (le "*" de Spring exige un
+        // caractère avant ".realis.app") : le domaine racine doit être listé explicitement,
+        // sans quoi FRONTEND_URL=https://realis.app (valeur par défaut) serait rejeté par CORS.
+        config.setAllowedOriginPatterns(List.of(
+            "http://localhost:3000",
+            "https://realis.app",
+            "https://*.realis.app"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true);

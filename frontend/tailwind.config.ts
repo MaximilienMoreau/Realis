@@ -24,7 +24,8 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "sans-serif"],
+        // Injectée par next/font/google dans layout.tsx (auto-hébergée, compatible CSP).
+        sans: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
     },
   },

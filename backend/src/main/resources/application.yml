@@ -34,8 +34,6 @@ server:
   port: 8080
   servlet:
     context-path: /
-
-# En-têtes de sécurité HTTP
   compression:
     enabled: true
 

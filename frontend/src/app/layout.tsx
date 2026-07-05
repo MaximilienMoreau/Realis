@@ -1,6 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import ThemeToggle from "@/components/ThemeToggle";
+
+// Auto-hébergée par Next.js au build (aucune requête réseau au runtime) :
+// compatible avec la CSP "default-src 'self'" qui bloquerait fonts.googleapis.com.
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 
 export const metadata: Metadata = {
   title: "Realis : Certification du réel",
@@ -27,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning className={inter.variable}>
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         {/* Anti-flash : applique le thème avant le premier rendu */}

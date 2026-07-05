@@ -28,6 +28,7 @@ basé sur un hash SHA-256 et un horodatage cryptographique RFC 3161 (TSP).
 - [Démarrage rapide](#démarrage-rapide)
 - [Architecture](#architecture)
 - [Endpoints principaux](#endpoints-principaux)
+- [Format des erreurs](#format-des-erreurs)
 - [Développement local](#développement-local-sans-docker)
 - [Vérification indépendante d'un jeton TSA](#vérification-indépendante-dun-jeton-tsa)
 - [RGPD](#rgpd)
@@ -140,13 +141,44 @@ Caméra → blob vidéo → upload backend
 | `GET` | `/api/verify/{id}` | — | Métadonnées publiques d'un scellement |
 | `GET` | `/api/verify/{id}/tsa` | — | Jeton RFC 3161 brut (`.tsr`) |
 | `GET` | `/api/verify/{id}/certificate` | — | Certificat PDF (lien partageable) |
-| `GET` | `/api/health` | — | Healthcheck |
+| `GET` | `/api/health` | — | Healthcheck applicatif |
+| `GET` | `/actuator/health` | — | Healthcheck Spring Boot Actuator (supervision externe) |
 
 </div>
 
 `/api/auth/**` et `/api/verify/**` sont publics par conception — la page de
 vérification et le certificat PDF doivent être consultables sans compte, via un
 simple lien. `/api/seal/**` (hors scellement en lui-même) exige un JWT.
+
+<br>
+
+## Format des erreurs
+
+Toute erreur renvoie un corps JSON homogène :
+
+```json
+{
+  "status": 404,
+  "error": "Not Found",
+  "message": "Enregistrement introuvable : ...",
+  "timestamp": "2026-07-05T10:00:00Z"
+}
+```
+
+<div align="center">
+
+| Code | Cas |
+|:---|:---|
+| `400` | Requête invalide (validation, email déjà utilisé) |
+| `401` | JWT absent, invalide ou expiré |
+| `403` | Accès à une ressource dont on n'est pas propriétaire |
+| `404` | Ressource introuvable |
+| `409` | Conflit (ex. suppression d'un enregistrement déjà supprimé, email déjà pris en cas de course concurrente) |
+| `413` | Fichier trop volumineux (> 500 Mo) |
+| `429` | Trop de tentatives (`/api/auth/login`, `/api/auth/register`) |
+| `503` | TSA (FreeTSA) temporairement indisponible |
+
+</div>
 
 <br>
 
