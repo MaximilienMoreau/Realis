@@ -15,7 +15,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-# ── Étape 3 : image runtime (standalone) ─────────────────────────
+# ── Étape 3 : image runtime (standalone) ──
 FROM node:20-alpine AS runner
 WORKDIR /app
 
