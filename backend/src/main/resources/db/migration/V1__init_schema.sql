@@ -56,14 +56,27 @@ CREATE TABLE sealed_records (
 CREATE OR REPLACE FUNCTION prevent_sealed_record_update()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Seule la suppression logique est autorisée (et uniquement si le champ est NULL)
+    -- Seule la suppression logique est autorisée (et uniquement si le champ est NULL).
+    -- Toutes les colonnes portant la preuve doivent rester strictement identiques :
+    -- un simple contrôle sur (id, user_id, consent_log_id, sha256_hex, tsa_token_der,
+    -- storage_path) laissait passer une réécriture silencieuse de tsa_timestamp/tsa_url
+    -- (l'horodatage lui-même) en même temps que le soft-delete.
     IF OLD.deleted_at IS NULL AND
        NEW.deleted_at IS NOT NULL AND
        NEW.id              = OLD.id              AND
        NEW.user_id         = OLD.user_id         AND
        NEW.consent_log_id  = OLD.consent_log_id  AND
+       NEW.file_name       = OLD.file_name       AND
+       NEW.file_size_bytes = OLD.file_size_bytes AND
+       NEW.mime_type       = OLD.mime_type       AND
        NEW.sha256_hex      = OLD.sha256_hex      AND
        NEW.tsa_token_der   = OLD.tsa_token_der   AND
+       NEW.tsa_url         = OLD.tsa_url         AND
+       NEW.tsa_timestamp   = OLD.tsa_timestamp   AND
+       NEW.sealed_at       = OLD.sealed_at       AND
+       NEW.geoloc_lat      IS NOT DISTINCT FROM OLD.geoloc_lat  AND
+       NEW.geoloc_lng      IS NOT DISTINCT FROM OLD.geoloc_lng  AND
+       NEW.device_ua       IS NOT DISTINCT FROM OLD.device_ua  AND
        NEW.storage_path    = OLD.storage_path
     THEN
         RETURN NEW;
