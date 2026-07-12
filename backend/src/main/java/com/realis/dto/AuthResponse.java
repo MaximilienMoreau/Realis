@@ -2,7 +2,7 @@ package com.realis.dto;
 
 import java.util.UUID;
 
-public record RegisterResponse(
+public record AuthResponse(
     String token,
     UUID   userId,
     String email

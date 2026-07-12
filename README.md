@@ -146,7 +146,7 @@ Caméra → blob vidéo → upload backend
 
 </div>
 
-`/api/auth/**` et `/api/verify/**` sont publics par conception — la page de
+`/api/auth/**` et `/api/verify/**` sont publics par conception : la page de
 vérification et le certificat PDF doivent être consultables sans compte, via un
 simple lien. `/api/seal/**` (hors scellement en lui-même) exige un JWT.
 
@@ -195,8 +195,17 @@ DB_PASSWORD=xxx \
 JWT_SECRET=xxx \
 STORAGE_PATH=/tmp/realis-captures \
 ENCRYPTION_KEY=xxx \
+FRONTEND_URL=http://localhost:3000 \
 mvn spring-boot:run
 ```
+
+`TSA_PROVIDER`, `TSA_URL` et `TRUST_FORWARDED_FOR` ont des valeurs par défaut
+raisonnables (voir `application.yml`) et peuvent être omis. Attention en revanche
+à `TSA_CERT_PATH` : sa valeur par défaut (`/app/tsa-certs/freetsa-ca.crt`) est un
+chemin absolu valide uniquement dans le conteneur Docker. Hors Docker, pointez-le
+vers le fichier versionné du dépôt, ex. `TSA_CERT_PATH=$(pwd)/src/main/resources/tsa-certs/freetsa-ca.crt`,
+sans quoi la vérification TSA locale se fait sans ancre de confiance (avertissement
+en log, pas d'échec).
 
 ### Frontend
 
@@ -216,9 +225,10 @@ Un jeton RFC 3161 stocké en DB peut être vérifié **sans Realis** :
 # Exporter le token via l'API
 curl -o token.tsr http://localhost:8080/api/verify/{id}/tsa
 
-# Vérifier avec openssl
+# Vérifier avec openssl (freetsa-ca.crt est versionné dans le dépôt :
+# backend/src/main/resources/tsa-certs/freetsa-ca.crt)
 openssl ts -verify -in token.tsr -data fichier_original.webm \
-  -CAfile freetsa-ca.crt
+  -CAfile backend/src/main/resources/tsa-certs/freetsa-ca.crt
 ```
 
 <br>
@@ -230,8 +240,14 @@ openssl ts -verify -in token.tsr -data fichier_original.webm \
 - Endpoint de suppression logique disponible (avec avertissement : la suppression invalide la preuve).
 - Minimisation des données : seuls les champs nécessaires à la preuve sont collectés.
 - Rate-limiting basique (10 requêtes/minute/IP) sur `/api/auth/login` et
-  `/api/auth/register` pour limiter le bruteforce (en mémoire, mono-instance —
-  à remplacer par un backend partagé type Redis en cas de scale-out).
+  `/api/auth/register`, et (30 requêtes/minute/IP) sur `/api/verify`, pour
+  limiter le bruteforce et les abus (en mémoire, mono-instance, à remplacer
+  par un backend partagé type Redis en cas de scale-out).
+- L'IP cliente utilisée pour le rate-limiting et le journal de consentement est
+  celle de la connexion TCP directe par défaut. Derrière un reverse proxy de
+  confiance, activer `TRUST_FORWARDED_FOR=true` (voir `.env.example`) pour lire
+  `X-Forwarded-For`, à n'activer que si ce proxy écrase l'en-tête entrant,
+  sinon un client peut usurper une IP arbitraire.
 
 <br>
 

@@ -5,9 +5,9 @@ export PATH := /usr/local/bin:/usr/bin:/bin:$(PATH)
 
 help:
 	@echo ""
-	@echo "  make dev        — lance postgres + backend + frontend"
-	@echo "  make dev-reset  — remet la DB à zéro et relance (résout les erreurs de mot de passe)"
-	@echo "  make stop       — arrête tout"
+	@echo "  make dev        : lance postgres + backend + frontend"
+	@echo "  make dev-reset  : remet la DB à zéro et relance (résout les erreurs de mot de passe)"
+	@echo "  make stop       : arrête tout"
 	@echo ""
 
 dev:

@@ -135,6 +135,12 @@ function VerificationResult({ result }: { result: VerificationResponse }) {
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6 space-y-5">
       <VerdictBadge verdict={result.verdict} />
 
+      {result.record?.deleted && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 rounded-xl p-3 text-sm text-center">
+          {result.record.warning ?? "Cet enregistrement a été supprimé. La preuve n'est plus vérifiable."}
+        </div>
+      )}
+
       <CheckBlock
         title="(a) Intégrité du fichier"
         passed={result.integrityCheck.passed}

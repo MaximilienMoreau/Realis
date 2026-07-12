@@ -2,10 +2,12 @@ package com.realis.controller;
 
 import com.realis.dto.LoginRequest;
 import com.realis.dto.RegisterRequest;
-import com.realis.dto.RegisterResponse;
+import com.realis.dto.AuthResponse;
+import com.realis.config.NetworkProperties;
 import com.realis.exception.TooManyRequestsException;
 import com.realis.model.User;
 import com.realis.repository.UserRepository;
+import com.realis.security.ClientIpResolver;
 import com.realis.security.RateLimiter;
 import com.realis.service.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -40,7 +42,8 @@ class AuthControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AuthController(userRepository, passwordEncoder, jwtService, rateLimiter);
+        ClientIpResolver clientIpResolver = new ClientIpResolver(new NetworkProperties(false));
+        controller = new AuthController(userRepository, passwordEncoder, jwtService, rateLimiter, clientIpResolver);
         when(httpRequest.getRemoteAddr()).thenReturn("203.0.113.1");
         when(rateLimiter.tryAcquire(any(), anyInt())).thenReturn(true);
     }
@@ -57,7 +60,7 @@ class AuthControllerTest {
         when(jwtService.generateToken(any(), any())).thenReturn("jwt-token");
 
         RegisterRequest request = new RegisterRequest("Test@Realis.FR", "motdepasse123");
-        ResponseEntity<RegisterResponse> response = controller.register(request, httpRequest);
+        ResponseEntity<AuthResponse> response = controller.register(request, httpRequest);
 
         assertThat(response.getBody().email()).isEqualTo("test@realis.fr");
         verify(userRepository).existsByEmail("test@realis.fr");
@@ -95,7 +98,7 @@ class AuthControllerTest {
         when(jwtService.generateToken(any(), any())).thenReturn("jwt-token");
 
         LoginRequest request = new LoginRequest("Test@Realis.FR", "motdepasse123");
-        ResponseEntity<RegisterResponse> response = controller.login(request, httpRequest);
+        ResponseEntity<AuthResponse> response = controller.login(request, httpRequest);
 
         assertThat(response.getBody().email()).isEqualTo("test@realis.fr");
     }

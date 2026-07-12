@@ -3,10 +3,14 @@ package com.realis.controller;
 import com.realis.dto.SealResponse;
 import com.realis.dto.VerificationResponse;
 import com.realis.exception.ResourceNotFoundException;
+import com.realis.exception.TooManyRequestsException;
 import com.realis.model.SealedRecord;
 import com.realis.repository.SealedRecordRepository;
+import com.realis.security.ClientIpResolver;
+import com.realis.security.RateLimiter;
 import com.realis.service.PdfCertificateService;
 import com.realis.service.VerificationService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -32,9 +36,17 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class VerificationController {
 
+    // POST /api/verify n'exige aucune authentification et accepte jusqu'à 500 Mo
+    // (voir application.yml) : sans limite, c'est une porte ouverte au calcul gratuit
+    // (hash SHA-256 sur des uploads répétés). Volontairement plus permissif que
+    // /api/auth/** (usage légitime : vérifier plusieurs fichiers d'affilée).
+    private static final int MAX_ATTEMPTS_PER_MINUTE = 30;
+
     private final VerificationService verificationService;
     private final PdfCertificateService pdfCertificateService;
     private final SealedRecordRepository sealedRecordRepository;
+    private final RateLimiter rateLimiter;
+    private final ClientIpResolver clientIpResolver;
 
     /**
      * Vérifie l'intégrité et l'horodatage d'un fichier.
@@ -48,11 +60,17 @@ public class VerificationController {
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<VerificationResponse> verify(
         @RequestPart("file") MultipartFile file,
-        @RequestParam(value = "recordId", required = false) UUID recordId
+        @RequestParam(value = "recordId", required = false) UUID recordId,
+        HttpServletRequest httpRequest
     ) throws IOException {
 
         if (file.isEmpty()) {
             throw new IllegalArgumentException("Le fichier ne peut pas être vide");
+        }
+
+        String rateLimitKey = "verify:" + clientIpResolver.resolve(httpRequest);
+        if (!rateLimiter.tryAcquire(rateLimitKey, MAX_ATTEMPTS_PER_MINUTE)) {
+            throw new TooManyRequestsException("Trop de vérifications, réessayez dans une minute.");
         }
 
         VerificationResponse response = verificationService.verify(file, recordId);

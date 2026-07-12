@@ -58,6 +58,9 @@ realis:
     path: ${STORAGE_PATH}
     encryption-key: ${ENCRYPTION_KEY}
 
+  network:
+    trust-forwarded-for: ${TRUST_FORWARDED_FOR:false}
+
   tsa:
     provider: ${TSA_PROVIDER:freetsa}
     url: ${TSA_URL:https://freetsa.org/tsr}

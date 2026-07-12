@@ -7,6 +7,7 @@ import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSSignedData;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
+import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
 import org.bouncycastle.tsp.*;
 
 import java.io.IOException;
@@ -96,13 +97,20 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
     /**
      * Vérifie un jeton RFC 3161 de façon indépendante.
      *
-     * Deux vérifications distinctes :
-     *  (a) Intégrité du fichier : le hash dans le jeton == sha256Bytes fourni
-     *  (b) Horodatage : la signature du jeton est valide (via cert TSA)
+     * Trois vérifications distinctes :
+     *  (a) Intégrité du fichier : le hash dans le jeton == sha256Bytes fourni.
+     *  (b) Chaîne de confiance : le certificat signataire embarqué dans le jeton est bien
+     *      émis par l'autorité configurée localement (props.certPath(), la racine CA
+     *      FreeTSA). Sans cette étape, n'importe quel certificat auto-signé embarqué dans
+     *      le jeton (contrôlé par l'émetteur du jeton, pas par Realis) serait accepté :
+     *      un jeton entièrement forgé passerait la vérification de signature (b) suivante
+     *      puisqu'elle porterait sur une clé que l'attaquant a lui-même fournie.
+     *  (c) Signature : la signature CMS du jeton correspond bien au certificat signataire.
      *
-     * Pour la résolution du certificat :
-     *  - Priorité 1 : certificat de confiance configuré localement (trust anchor)
-     *  - Priorité 2 : certificat embarqué dans le jeton (présent si certReq=true)
+     * Le certificat utilisé pour vérifier la signature CMS (c) est toujours celui
+     * embarqué dans le jeton (présent car certReq=true à la demande) : c'est la seule clé
+     * publique disponible pour cette vérification. Ce que (b) garantit, c'est que ce
+     * certificat descend bien de l'autorité de confiance configurée, et non d'un tiers.
      */
     @Override
     public TsaVerificationResult verify(byte[] tokenDer, byte[] sha256Bytes) throws TimestampException {
@@ -119,7 +127,6 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
                     "le fichier a peut-être été altéré après l'horodatage.");
             }
 
-            // (b) Vérification de la signature du jeton
             Collection<SignerInformation> signers = signedData.getSignerInfos().getSigners();
             if (signers.isEmpty()) {
                 return new TsaVerificationResult(false, null,
@@ -127,12 +134,27 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
             }
             SignerInformation si = signers.iterator().next();
 
-            X509CertificateHolder signerCert = resolveSignerCert(signedData, si);
+            X509CertificateHolder signerCert = extractEmbeddedSignerCert(signedData, si);
             if (signerCert == null) {
                 return new TsaVerificationResult(false, null,
-                    "Certificat TSA introuvable : impossible de vérifier la signature du jeton.");
+                    "Certificat signataire introuvable dans le jeton TSA : impossible de vérifier la signature.");
             }
 
+            // (b) Chaîne de confiance vers l'autorité configurée localement
+            X509CertificateHolder trustedRoot = loadTrustedRoot();
+            if (trustedRoot != null) {
+                if (!isIssuedBy(signerCert, trustedRoot)) {
+                    return new TsaVerificationResult(false, null,
+                        "Le certificat signataire du jeton TSA n'est pas émis par l'autorité de " +
+                        "confiance configurée (" + props.certPath() + ") : jeton rejeté.");
+                }
+            } else {
+                log.warn("Aucune ancre de confiance TSA lisible ({}) : le certificat embarqué dans " +
+                    "le jeton est utilisé sans validation de chaîne. À corriger avant mise en production.",
+                    props.certPath());
+            }
+
+            // (c) Vérification de la signature du jeton
             bcToken.validate(
                 new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(signerCert)
             );
@@ -152,31 +174,38 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
         }
     }
 
-    /**
-     * Résout le certificat du signataire TSA.
-     * Priorité 1 : fichier de confiance configuré (trust anchor local).
-     * Priorité 2 : certificat embarqué dans le jeton (certReq=true lors de la demande).
-     */
+    /** Certificat effectivement utilisé pour signer le jeton (embarqué, car certReq=true à la demande). */
     @SuppressWarnings("unchecked")
-    private X509CertificateHolder resolveSignerCert(CMSSignedData signedData, SignerInformation si) {
-        Path certPath = Path.of(props.certPath());
-        if (Files.exists(certPath)) {
-            try {
-                return new X509CertificateHolder(Files.readAllBytes(certPath));
-            } catch (Exception e) {
-                log.warn("Impossible de charger le certificat TSA configuré ({}), utilisation du cert embarqué",
-                    props.certPath(), e);
-            }
-        }
-
-        // Fallback : cert embarqué dans la structure CMS du jeton
+    private X509CertificateHolder extractEmbeddedSignerCert(CMSSignedData signedData, SignerInformation si) {
         Collection<X509CertificateHolder> matches =
             (Collection<X509CertificateHolder>) signedData.getCertificates().getMatches(si.getSID());
-        if (!matches.isEmpty()) {
-            return matches.iterator().next();
-        }
+        return matches.isEmpty() ? null : matches.iterator().next();
+    }
 
-        return null;
+    /** Ancre de confiance locale (racine CA FreeTSA), si le fichier configuré existe et est lisible. */
+    private X509CertificateHolder loadTrustedRoot() {
+        Path certPath = Path.of(props.certPath());
+        if (!Files.exists(certPath)) {
+            return null;
+        }
+        try {
+            return new X509CertificateHolder(Files.readAllBytes(certPath));
+        } catch (Exception e) {
+            log.warn("Impossible de charger le certificat de confiance TSA configuré ({})", props.certPath(), e);
+            return null;
+        }
+    }
+
+    /** Vérifie que `cert` a bien été signé par la clé privée correspondant à `issuer`. */
+    private boolean isIssuedBy(X509CertificateHolder cert, X509CertificateHolder issuer) {
+        try {
+            return cert.isSignatureValid(
+                new JcaContentVerifierProviderBuilder().setProvider("BC").build(issuer)
+            );
+        } catch (Exception e) {
+            log.warn("Erreur lors de la vérification de la chaîne de certificats TSA", e);
+            return false;
+        }
     }
 
     private byte[] sendHttpPost(byte[] body) throws IOException {

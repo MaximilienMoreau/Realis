@@ -92,7 +92,11 @@ public class StorageService {
 
     /**
      * Déchiffre et retourne les octets d'un enregistrement stocké.
-     * Utilisé pour la vérification : on relit le fichier pour en recalculer le hash.
+     *
+     * Non appelé par le flux de vérification actuel (celui-ci compare uniquement le hash
+     * re-calculé du fichier soumis au hash stocké en base, sans jamais relire le volume) :
+     * cette méthode existe comme contrepartie symétrique de encryptAndStore, pour des
+     * besoins futurs (récupération, contrôle d'intégrité du volume de stockage lui-même).
      */
     public byte[] decryptToBytes(String storagePath) throws IOException {
         byte[] raw = Files.readAllBytes(Path.of(storagePath));
@@ -111,7 +115,8 @@ public class StorageService {
     }
 
     /**
-     * Déchiffre vers un fichier temporaire (pour re-calcul de hash en streaming).
+     * Déchiffre vers un fichier temporaire (pour un futur re-calcul de hash en streaming,
+     * non utilisé par le flux de vérification actuel, voir decryptToBytes).
      * L'appelant est responsable de supprimer le fichier temporaire.
      */
     public Path decryptToTempFile(String storagePath) throws IOException {
