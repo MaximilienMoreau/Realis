@@ -81,8 +81,17 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
 
   const startRecording = () => {
     if (!streamRef.current) return;
-    const mimeType = resolveMimeType();
-    const recorder = new MediaRecorder(streamRef.current, { mimeType });
+
+    let recorder: MediaRecorder;
+    try {
+      const mimeType = resolveMimeType();
+      recorder = new MediaRecorder(streamRef.current, { mimeType });
+    } catch {
+      setErrorMsg("Impossible de démarrer l'enregistrement : format vidéo non supporté par ce navigateur.");
+      setState("error");
+      return;
+    }
+
     chunksRef.current = [];
 
     recorder.ondataavailable = (e) => {
@@ -93,10 +102,10 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
       stopStream();
       if (timerRef.current) clearInterval(timerRef.current);
 
-      const blob = new Blob(chunksRef.current, { type: mimeType });
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
       const metadata: CaptureMetadata = {
         capturedAt: new Date().toISOString(),
-        mimeType,
+        mimeType: recorder.mimeType,
         deviceUa: navigator.userAgent,
       };
 
@@ -116,7 +125,13 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
       onCaptured(blob, metadata);
     };
 
-    recorder.start(1000);
+    try {
+      recorder.start(1000);
+    } catch {
+      setErrorMsg("Impossible de démarrer l'enregistrement.");
+      setState("error");
+      return;
+    }
     recorderRef.current = recorder;
     setDuration(0);
     timerRef.current = setInterval(() => setDuration((d) => d + 1), 1000);
@@ -239,6 +254,16 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
             className="flex-1 py-3 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 font-medium rounded-xl transition-colors"
           >
             Recommencer
+          </button>
+        )}
+
+        {state === "error" && (
+          <button
+            type="button"
+            onClick={() => { stopStream(); retake(); }}
+            className="flex-1 py-3 bg-realis-600 hover:bg-realis-700 text-white font-medium rounded-xl transition-colors"
+          >
+            Réessayer
           </button>
         )}
       </div>

@@ -17,7 +17,7 @@ import java.util.UUID;
 @Slf4j
 public class JwtService {
 
-    // HS256 exige une clé d'au moins 256 bits (32 octets) — RFC 7518 §3.2.
+    // HS256 exige une clé d'au moins 256 bits (32 octets, RFC 7518 §3.2).
     private static final int MIN_SECRET_BYTES = 32;
 
     private final JwtProperties props;

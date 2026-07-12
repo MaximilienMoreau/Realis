@@ -2,6 +2,7 @@ package com.realis.controller;
 
 import com.realis.dto.SealRequest;
 import com.realis.dto.SealResponse;
+import com.realis.security.ClientIpResolver;
 import com.realis.service.SealingService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.util.UUID;
 public class SealingController {
 
     private final SealingService sealingService;
+    private final ClientIpResolver clientIpResolver;
 
     /**
      * Scelle une capture :
@@ -44,7 +46,7 @@ public class SealingController {
         }
         UUID userId = (UUID) authentication.getPrincipal();
         SealRequest request = new SealRequest(mimeType, geolocLat, geolocLng, deviceUa);
-        SealResponse response = sealingService.seal(file, userId, request, httpRequest.getRemoteAddr());
+        SealResponse response = sealingService.seal(file, userId, request, clientIpResolver.resolve(httpRequest));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

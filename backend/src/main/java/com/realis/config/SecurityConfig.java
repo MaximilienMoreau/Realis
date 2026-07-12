@@ -59,7 +59,7 @@ public class SecurityConfig {
 
     /**
      * Sans httpBasic()/formLogin() ni entry point explicite, Spring Security retombe sur
-     * Http403ForbiddenEntryPoint (403) pour toute requête non authentifiée — alors que le
+     * Http403ForbiddenEntryPoint (403) pour toute requête non authentifiée, alors que le
      * frontend distingue "session expirée" (401) de "accès interdit" (403). On force donc
      * un 401 JSON, cohérent avec le format ErrorResponse utilisé par GlobalExceptionHandler.
      */

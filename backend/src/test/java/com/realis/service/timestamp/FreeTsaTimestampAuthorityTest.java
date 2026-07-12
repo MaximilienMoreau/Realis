@@ -23,9 +23,12 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
 import org.bouncycastle.tsp.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
@@ -192,6 +195,74 @@ class FreeTsaTimestampAuthorityTest {
         assertThat(result.timestamp()).isEqualTo(token.timestamp());
     }
 
+    // ── Tests de la chaîne de confiance (ancre CA configurée localement) ────────
+
+    @Test
+    @DisplayName("Ancre de confiance configurée + certificat signataire émis par cette CA → valide")
+    void verify_trustedRootConfigured_signerIssuedByRoot_returnsValid(@TempDir Path tempDir) throws Exception {
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA", "BC");
+        kpg.initialize(2048);
+
+        KeyPair rootKeyPair = kpg.generateKeyPair();
+        X500Name rootName = new X500Name("CN=Test Root CA Realis, O=Test, C=FR");
+        X509CertificateHolder rootCertHolder = buildRootCaCert(rootKeyPair, rootName);
+
+        KeyPair tsaKeyPair = kpg.generateKeyPair();
+        X509CertificateHolder tsaCertHolder = buildTsaCertIssuedBy(tsaKeyPair, rootName, rootKeyPair);
+
+        byte[] hash = MessageDigest.getInstance("SHA-256")
+            .digest("chaîne de confiance valide".getBytes(StandardCharsets.UTF_8));
+        byte[] tokenDer = buildToken(tsaKeyPair, tsaCertHolder, hash);
+
+        Path certPath = tempDir.resolve("freetsa-ca.crt");
+        Files.write(certPath, rootCertHolder.getEncoded());
+
+        FreeTsaTimestampAuthority authority = new FreeTsaTimestampAuthority(
+            new TsaProperties("test", "http://localhost:9999", certPath.toString(), 5000)
+        );
+
+        TsaVerificationResult result = authority.verify(tokenDer, hash);
+
+        assertThat(result.valid()).isTrue();
+        assertThat(result.timestamp()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("Ancre de confiance configurée mais certificat signataire émis par une autre CA → rejeté")
+    void verify_trustedRootConfigured_signerIssuedByOtherCa_returnsInvalid(@TempDir Path tempDir) throws Exception {
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA", "BC");
+        kpg.initialize(2048);
+
+        // CA "légitime" configurée localement, mais absente de la chaîne du jeton ci-dessous
+        KeyPair legitimateRootKeyPair = kpg.generateKeyPair();
+        X509CertificateHolder legitimateRootCertHolder = buildRootCaCert(
+            legitimateRootKeyPair, new X500Name("CN=Test Root CA Realis, O=Test, C=FR"));
+
+        // CA "attaquant" : émet elle-même le certificat signataire embarqué dans le jeton
+        KeyPair rogueRootKeyPair = kpg.generateKeyPair();
+        X500Name rogueRootName = new X500Name("CN=Rogue CA, O=Attacker, C=FR");
+
+        KeyPair tsaKeyPair = kpg.generateKeyPair();
+        X509CertificateHolder tsaCertHolder = buildTsaCertIssuedBy(tsaKeyPair, rogueRootName, rogueRootKeyPair);
+
+        byte[] hash = MessageDigest.getInstance("SHA-256")
+            .digest("jeton forgé par une autre CA".getBytes(StandardCharsets.UTF_8));
+        byte[] tokenDer = buildToken(tsaKeyPair, tsaCertHolder, hash);
+
+        Path certPath = tempDir.resolve("freetsa-ca.crt");
+        Files.write(certPath, legitimateRootCertHolder.getEncoded());
+
+        FreeTsaTimestampAuthority authority = new FreeTsaTimestampAuthority(
+            new TsaProperties("test", "http://localhost:9999", certPath.toString(), 5000)
+        );
+
+        TsaVerificationResult result = authority.verify(tokenDer, hash);
+
+        assertThat(result.valid()).isFalse();
+        assertThat(result.timestamp()).isNull();
+        assertThat(result.message()).containsIgnoringCase("n'est pas émis par l'autorité de confiance");
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private static X509CertificateHolder buildTsaCert(KeyPair keyPair) throws Exception {
@@ -211,5 +282,70 @@ class FreeTsaTimestampAuthorityTest {
         builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
 
         return builder.build(signer);
+    }
+
+    /** Certificat de CA racine auto-signé (basicConstraints CA:true). */
+    private static X509CertificateHolder buildRootCaCert(KeyPair keyPair, X500Name subject) throws Exception {
+        Date notBefore = new Date();
+        Date notAfter  = new Date(System.currentTimeMillis() + 365L * 24 * 60 * 60 * 1000);
+
+        ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA")
+            .setProvider("BC").build(keyPair.getPrivate());
+
+        X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+            subject, BigInteger.valueOf(1), notBefore, notAfter, subject, keyPair.getPublic()
+        );
+        builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true));
+
+        return builder.build(signer);
+    }
+
+    /** Certificat signataire TSA (timeStamping), émis et signé par la CA donnée. */
+    private static X509CertificateHolder buildTsaCertIssuedBy(
+        KeyPair tsaKeyPair, X500Name issuerName, KeyPair issuerKeyPair
+    ) throws Exception {
+        X500Name subject = new X500Name("CN=Test TSA Leaf Realis, O=Test, C=FR");
+        Date notBefore    = new Date();
+        Date notAfter     = new Date(System.currentTimeMillis() + 365L * 24 * 60 * 60 * 1000);
+
+        ContentSigner signer = new JcaContentSignerBuilder("SHA256withRSA")
+            .setProvider("BC").build(issuerKeyPair.getPrivate());
+
+        X509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
+            issuerName, BigInteger.valueOf(2), notBefore, notAfter, subject, tsaKeyPair.getPublic()
+        );
+        builder.addExtension(Extension.extendedKeyUsage, true,
+            new ExtendedKeyUsage(KeyPurposeId.id_kp_timeStamping));
+        builder.addExtension(Extension.basicConstraints, true, new BasicConstraints(false));
+
+        return builder.build(signer);
+    }
+
+    /** Génère un jeton TSP signé par la clé TSA donnée, avec le certificat signataire embarqué (certReq=true). */
+    private static byte[] buildToken(
+        KeyPair tsaKeyPair, X509CertificateHolder tsaCertHolder, byte[] hash
+    ) throws Exception {
+        X509Certificate tsaCert = new JcaX509CertificateConverter()
+            .setProvider("BC").getCertificate(tsaCertHolder);
+
+        ContentSigner contentSigner = new JcaContentSignerBuilder("SHA256withRSA")
+            .setProvider("BC").build(tsaKeyPair.getPrivate());
+
+        DigestCalculatorProvider dcp = new JcaDigestCalculatorProviderBuilder()
+            .setProvider("BC").build();
+        DigestCalculator hashCalc = dcp.get(new AlgorithmIdentifier(NISTObjectIdentifiers.id_sha256));
+
+        TimeStampTokenGenerator tokenGen = new TimeStampTokenGenerator(
+            new JcaSignerInfoGeneratorBuilder(dcp).build(contentSigner, tsaCert),
+            hashCalc,
+            new ASN1ObjectIdentifier("1.3.6.1.4.1.99999.1")
+        );
+        tokenGen.addCertificates(new JcaCertStore(List.of(tsaCert)));
+
+        TimeStampRequestGenerator reqGen = new TimeStampRequestGenerator();
+        reqGen.setCertReq(true);
+        TimeStampRequest req = reqGen.generate(TSPAlgorithms.SHA256, hash);
+        org.bouncycastle.tsp.TimeStampToken token = tokenGen.generate(req, BigInteger.ONE, new Date());
+        return token.getEncoded();
     }
 }

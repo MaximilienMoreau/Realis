@@ -16,7 +16,7 @@
   <artifactId>realis-backend</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <name>realis-backend</name>
-  <description>Backend Realis — certification du réel (MVP)</description>
+  <description>Backend Realis certification du réel (MVP)</description>
 
   <properties>
     <!-- Java 17 en local ; le Dockerfile compile et tourne sur Java 21 -->
@@ -99,7 +99,7 @@
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
 
-    <!-- BouncyCastle — RFC 3161 (TSP) + crypto -->
+    <!-- BouncyCastle : RFC 3161 (TSP) + crypto -->
     <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcprov-jdk18on</artifactId>
@@ -111,7 +111,7 @@
       <version>${bouncycastle.version}</version>
     </dependency>
 
-    <!-- Génération PDF — iText 8 Community (licence AGPL)
+    <!-- Génération PDF : iText 8 Community (licence AGPL)
          Modules : kernel (PDF bas niveau) + layout (mise en page) + io (fonts) -->
     <dependency>
       <groupId>com.itextpdf</groupId>

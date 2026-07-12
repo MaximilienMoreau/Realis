@@ -39,7 +39,12 @@ services:
       TSA_PROVIDER: ${TSA_PROVIDER}
       TSA_URL: ${TSA_URL}
       TSA_CERT_PATH: ${TSA_CERT_PATH}
-      FRONTEND_URL: ${FRONTEND_URL}
+      # Défaut explicite : sans lui, une variable absente de .env est passée comme
+      # chaîne vide (pas absente) au conteneur, et le défaut Spring de application.yml
+      # (${FRONTEND_URL:https://realis.app}) ne s'applique alors pas : les liens dans
+      # les certificats PDF seraient générés avec une URL vide.
+      FRONTEND_URL: ${FRONTEND_URL:-https://realis.app}
+      TRUST_FORWARDED_FOR: ${TRUST_FORWARDED_FOR:-false}
     volumes:
       - captures_data:/data/captures
     ports:

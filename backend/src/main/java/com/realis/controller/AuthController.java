@@ -1,11 +1,12 @@
 package com.realis.controller;
 
+import com.realis.dto.AuthResponse;
 import com.realis.dto.LoginRequest;
 import com.realis.dto.RegisterRequest;
-import com.realis.dto.RegisterResponse;
 import com.realis.exception.TooManyRequestsException;
 import com.realis.model.User;
 import com.realis.repository.UserRepository;
+import com.realis.security.ClientIpResolver;
 import com.realis.security.RateLimiter;
 import com.realis.service.JwtService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,9 +31,10 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final RateLimiter rateLimiter;
+    private final ClientIpResolver clientIpResolver;
 
     @PostMapping("/register")
-    public ResponseEntity<RegisterResponse> register(
+    public ResponseEntity<AuthResponse> register(
         @Valid @RequestBody RegisterRequest request,
         HttpServletRequest httpRequest
     ) {
@@ -48,11 +50,11 @@ public class AuthController {
         user = userRepository.save(user);
         String token = jwtService.generateToken(user.getId(), user.getEmail());
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(new RegisterResponse(token, user.getId(), user.getEmail()));
+            .body(new AuthResponse(token, user.getId(), user.getEmail()));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<RegisterResponse> login(
+    public ResponseEntity<AuthResponse> login(
         @Valid @RequestBody LoginRequest request,
         HttpServletRequest httpRequest
     ) {
@@ -63,11 +65,11 @@ public class AuthController {
             throw new BadCredentialsException("Identifiants invalides");
         }
         String token = jwtService.generateToken(user.getId(), user.getEmail());
-        return ResponseEntity.ok(new RegisterResponse(token, user.getId(), user.getEmail()));
+        return ResponseEntity.ok(new AuthResponse(token, user.getId(), user.getEmail()));
     }
 
     private void checkRateLimit(String scope, HttpServletRequest httpRequest) {
-        String key = scope + ":" + httpRequest.getRemoteAddr();
+        String key = scope + ":" + clientIpResolver.resolve(httpRequest);
         if (!rateLimiter.tryAcquire(key, MAX_ATTEMPTS_PER_MINUTE)) {
             throw new TooManyRequestsException("Trop de tentatives, réessayez dans une minute.");
         }
