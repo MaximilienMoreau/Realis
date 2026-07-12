@@ -131,18 +131,18 @@ Caméra → blob vidéo → upload backend
 
 | Méthode | Route | Auth | Description |
 |:---|:---|:---|:---|
-| `POST` | `/api/auth/register` | — | Création de compte |
-| `POST` | `/api/auth/login` | — | Connexion |
+| `POST` | `/api/auth/register` | Public | Création de compte |
+| `POST` | `/api/auth/login` | Public | Connexion |
 | `POST` | `/api/seal` | JWT | Scelle une capture (multipart) |
 | `GET` | `/api/seal` | JWT | Liste les scellements de l'utilisateur connecté |
 | `GET` | `/api/seal/{id}` | JWT, propriétaire | Détail d'un scellement |
 | `DELETE` | `/api/seal/{id}` | JWT, propriétaire | Suppression logique (invalide la preuve) |
-| `POST` | `/api/verify` | — | Vérifie un fichier (verdict AUTHENTIQUE / ALTÉRÉ / INCONNU) |
-| `GET` | `/api/verify/{id}` | — | Métadonnées publiques d'un scellement |
-| `GET` | `/api/verify/{id}/tsa` | — | Jeton RFC 3161 brut (`.tsr`) |
-| `GET` | `/api/verify/{id}/certificate` | — | Certificat PDF (lien partageable) |
-| `GET` | `/api/health` | — | Healthcheck applicatif |
-| `GET` | `/actuator/health` | — | Healthcheck Spring Boot Actuator (supervision externe) |
+| `POST` | `/api/verify` | Public | Vérifie un fichier (verdict AUTHENTIQUE / ALTÉRÉ / INCONNU) |
+| `GET` | `/api/verify/{id}` | Public | Métadonnées publiques d'un scellement |
+| `GET` | `/api/verify/{id}/tsa` | Public | Jeton RFC 3161 brut (`.tsr`) |
+| `GET` | `/api/verify/{id}/certificate` | Public | Certificat PDF (lien partageable) |
+| `GET` | `/api/health` | Public | Healthcheck applicatif |
+| `GET` | `/actuator/health` | Public | Healthcheck Spring Boot Actuator (supervision externe) |
 
 </div>
 
