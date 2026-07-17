@@ -62,6 +62,7 @@ public class SealingService {
         Path tempFile = Files.createTempFile("realis-seal-", ".tmp");
         String sha256Hex;
         long fileSize;
+        String storagePath = null;
 
         try {
             try (OutputStream tempOut = Files.newOutputStream(tempFile)) {
@@ -71,14 +72,17 @@ public class SealingService {
 
             log.info("Scellement {} : hash SHA-256 calculé ({} octets)", recordId, fileSize);
 
-            // Chiffrement et stockage sur volume
-            String storagePath = storageService.encryptAndStore(tempFile, user.getId(), recordId);
-
-            // Horodatage RFC 3161 (no-op en incrément b, FreeTSA en incrément c)
+            // Horodatage RFC 3161 avant le stockage chiffré (no-op en incrément b, FreeTSA
+            // en incrément c) : si la TSA échoue, on évite d'écrire un fichier chiffré sur
+            // le volume qui resterait orphelin (le rollback transactionnel n'annule que les
+            // écritures DB, jamais une écriture disque déjà effectuée).
             byte[] sha256Bytes = hashService.hexToBytes(sha256Hex);
             TimestampToken tsaToken = timestampAuthority.timestamp(sha256Bytes);
 
             log.info("Scellement {} : horodatage obtenu (TSA : {})", recordId, tsaToken.tsaUrl());
+
+            // Chiffrement et stockage sur volume
+            storagePath = storageService.encryptAndStore(tempFile, user.getId(), recordId);
 
             // Création de l'enregistrement immuable
             SealedRecord record = SealedRecord.builder()
@@ -103,6 +107,14 @@ public class SealingService {
             log.info("Scellement {} terminé avec succès", recordId);
             return SealResponse.from(record);
 
+        } catch (Exception e) {
+            // Le fichier a pu être écrit sur le volume juste avant un échec plus tardif
+            // (ex. violation de contrainte DB à la sauvegarde) : on le nettoie explicitement
+            // pour ne pas laisser de fichier chiffré sans enregistrement associé.
+            if (storagePath != null) {
+                Files.deleteIfExists(Path.of(storagePath));
+            }
+            throw e;
         } finally {
             Files.deleteIfExists(tempFile);
         }

@@ -50,7 +50,10 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/health || exit 1"]
+      # /actuator/health (pas /api/health, qui répond "UP" sans jamais toucher la base) :
+      # inclut par défaut la vérification de connexion PostgreSQL via DataSourceHealthIndicator,
+      # donc détecte une base devenue inaccessible après le démarrage du conteneur.
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
