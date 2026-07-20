@@ -47,8 +47,14 @@ public class SealingService {
      *
      * Le hash porte sur les octets exacts tels qu'uploadés.
      * Aucun ré-encodage n'est effectué.
+     *
+     * rollbackFor = Exception.class : par défaut, Spring ne fait rollback que sur les
+     * RuntimeException. Cette méthode déclare `throws IOException` (checked) et peut
+     * échouer en cours de route après avoir déjà sauvegardé le ConsentLog (ligne
+     * createConsentLog) : sans rollbackFor, une IOException (disque plein, volume en
+     * lecture seule...) commiterait ce ConsentLog orphelin au lieu de l'annuler.
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public SealResponse seal(MultipartFile file, UUID userId, SealRequest request, String clientIp) throws IOException {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable : " + userId));

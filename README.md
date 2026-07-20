@@ -29,7 +29,9 @@ basé sur un hash SHA-256 et un horodatage cryptographique RFC 3161 (TSP).
 - [Architecture](#architecture)
 - [Endpoints principaux](#endpoints-principaux)
 - [Format des erreurs](#format-des-erreurs)
+- [Sécurité](#sécurité)
 - [Développement local](#développement-local-sans-docker)
+- [Tests](#tests)
 - [Vérification indépendante d'un jeton TSA](#vérification-indépendante-dun-jeton-tsa)
 - [RGPD](#rgpd)
 
@@ -106,7 +108,7 @@ Realis/
 | Base de données | PostgreSQL 16 | ACID, triggers d'immuabilité |
 | Horodatage | RFC 3161 (TSP) via FreeTSA | Juridiquement opposable, standard eIDAS |
 | Hash | SHA-256 (JCA) | Standard, vérifiable par tiers |
-| PDF | iText 8 Community (AGPL) | PDF/A, API fluide |
+| PDF | iText 8 Community (AGPL) | Génération programmatique, mise en page riche (tables, styles) |
 | Chiffrement at rest | AES-256-GCM (JCA) | Captures chiffrées sur disque |
 | Auth | JWT (JJWT) | Stateless, découplé |
 
@@ -175,8 +177,27 @@ Toute erreur renvoie un corps JSON homogène :
 | `404` | Ressource introuvable |
 | `409` | Conflit (ex. suppression d'un enregistrement déjà supprimé, email déjà pris en cas de course concurrente) |
 | `413` | Fichier trop volumineux (> 500 Mo) |
-| `429` | Trop de tentatives (`/api/auth/login`, `/api/auth/register`) |
+| `429` | Trop de tentatives (`/api/auth/login`, `/api/auth/register`, `/api/verify`) |
 | `503` | TSA (FreeTSA) temporairement indisponible |
+
+</div>
+
+<br>
+
+## Sécurité
+
+<div align="center">
+
+| Domaine | Mesure |
+|:---|:---|
+| Authentification | JWT stateless HS256 (JJWT), secret ≥ 32 octets exigé au démarrage |
+| Mots de passe | BCrypt, coût 12 |
+| Transport | CSP stricte (`default-src 'self'`), `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` |
+| CORS | Origines dérivées de `FRONTEND_URL`, `localhost:3000` en dev uniquement |
+| Chiffrement at rest | AES-256-GCM par capture, clé injectée via `ENCRYPTION_KEY` (jamais commitée) |
+| Rate-limiting | Fenêtre fixe en mémoire, par IP, sur `/api/auth/**` et `/api/verify` |
+| Immuabilité | Trigger PostgreSQL interdisant toute modification ou suppression physique d'un `sealed_record` (seule `deleted_at` peut être posé) |
+| Horodatage | Chaîne de confiance TSA vérifiée localement (`TSA_CERT_PATH`), pas seulement la signature du jeton |
 
 </div>
 
@@ -186,9 +207,26 @@ Toute erreur renvoie un corps JSON homogène :
 
 ### Backend
 
+**Option A — profil `local` (le plus rapide)**
+
+`application-local.yml` embarque déjà des valeurs de développement (secret JWT, clé
+de chiffrement, certificat TSA relatif au dépôt) : aucune variable d'environnement
+à définir.
+
+```bash
+# Démarrer un Postgres local d'abord (db `realis`, user/mdp `realis_user` / `realis_dev_password`
+# — voir application-local.yml), puis :
+cd backend
+mvn spring-boot:run -Dspring-boot.run.profiles=local
+```
+
+**Option B — variables d'environnement explicites**
+
+Pour tester une configuration proche de la production (autres identifiants, autre
+base, etc.) :
+
 ```bash
 cd backend
-# Démarrer un Postgres local d'abord, puis :
 DB_URL=jdbc:postgresql://localhost:5432/realis \
 DB_USER=realis_user \
 DB_PASSWORD=xxx \
@@ -213,6 +251,19 @@ en log, pas d'échec).
 cd frontend
 npm install
 NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev
+```
+
+<br>
+
+## Tests
+
+```bash
+# Backend : suite complète (JUnit + Mockito), inclut le round-trip AES-GCM,
+# la génération PDF et la vérification RFC 3161 avec une TSA auto-signée
+cd backend && mvn test
+
+# Frontend : vérification de types stricte
+cd frontend && npm run type-check
 ```
 
 <br>
