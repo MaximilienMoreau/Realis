@@ -72,6 +72,8 @@ export default function ConsentForm({ onConsent }: Props) {
           <br />
           <span className="text-gray-500 dark:text-gray-400 text-xs">
             J&apos;autorise l&apos;inclusion de ma position GPS dans la preuve.
+            Cette position sera visible par toute personne disposant du lien
+            du certificat (lien public, sans authentification requise).
           </span>
         </span>
       </label>

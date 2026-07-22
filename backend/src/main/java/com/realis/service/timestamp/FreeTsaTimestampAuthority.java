@@ -2,6 +2,9 @@ package com.realis.service.timestamp;
 
 import com.realis.config.TsaProperties;
 import lombok.extern.slf4j.Slf4j;
+import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.ExtendedKeyUsage;
+import org.bouncycastle.asn1.x509.KeyPurposeId;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cms.CMSException;
 import org.bouncycastle.cms.CMSSignedData;
@@ -22,6 +25,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Date;
 
 /**
  * Implémentation RFC 3161 (TSP) utilisant FreeTSA comme autorité d'horodatage.
@@ -97,17 +101,24 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
     /**
      * Vérifie un jeton RFC 3161 de façon indépendante.
      *
-     * Trois vérifications distinctes :
+     * Cinq vérifications distinctes :
      *  (a) Intégrité du fichier : le hash dans le jeton == sha256Bytes fourni.
      *  (b) Chaîne de confiance : le certificat signataire embarqué dans le jeton est bien
      *      émis par l'autorité configurée localement (props.certPath(), la racine CA
      *      FreeTSA). Sans cette étape, n'importe quel certificat auto-signé embarqué dans
      *      le jeton (contrôlé par l'émetteur du jeton, pas par Realis) serait accepté :
-     *      un jeton entièrement forgé passerait la vérification de signature (b) suivante
+     *      un jeton entièrement forgé passerait la vérification de signature (e) suivante
      *      puisqu'elle porterait sur une clé que l'attaquant a lui-même fournie.
-     *  (c) Signature : la signature CMS du jeton correspond bien au certificat signataire.
+     *  (c) Extended Key Usage : le certificat signataire doit revendiquer id-kp-timeStamping
+     *      (RFC 3161 §2.3). Sans ce contrôle, n'importe quel certificat émis par la racine
+     *      de confiance configurée (pas nécessairement un certificat de TSA) serait accepté
+     *      si cette racine émet aussi d'autres types de certificats.
+     *  (d) Période de validité : le certificat signataire doit être valide à la date
+     *      d'horodatage revendiquée par le jeton (et non à la date courante, qui rendrait
+     *      invalides d'anciens jetons pourtant légitimes une fois le certificat expiré).
+     *  (e) Signature : la signature CMS du jeton correspond bien au certificat signataire.
      *
-     * Le certificat utilisé pour vérifier la signature CMS (c) est toujours celui
+     * Le certificat utilisé pour vérifier la signature CMS (e) est toujours celui
      * embarqué dans le jeton (présent car certReq=true à la demande) : c'est la seule clé
      * publique disponible pour cette vérification. Ce que (b) garantit, c'est que ce
      * certificat descend bien de l'autorité de confiance configurée, et non d'un tiers.
@@ -154,12 +165,27 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
                     props.certPath());
             }
 
-            // (c) Vérification de la signature du jeton
+            Instant tsaInstant = bcToken.getTimeStampInfo().getGenTime().toInstant();
+
+            // (c) Extended Key Usage : le certificat doit être un certificat de TSA
+            if (!hasTimestampingEku(signerCert)) {
+                return new TsaVerificationResult(false, null,
+                    "Le certificat signataire ne revendique pas l'Extended Key Usage " +
+                    "'timeStamping' requis par la RFC 3161 : jeton rejeté.");
+            }
+
+            // (d) Période de validité du certificat à la date d'horodatage revendiquée
+            if (!isValidAt(signerCert, tsaInstant)) {
+                return new TsaVerificationResult(false, null,
+                    "Le certificat signataire n'était pas valide à la date d'horodatage " +
+                    "revendiquée (" + tsaInstant + ") : jeton rejeté.");
+            }
+
+            // (e) Vérification de la signature du jeton
             bcToken.validate(
                 new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(signerCert)
             );
 
-            Instant tsaInstant = bcToken.getTimeStampInfo().getGenTime().toInstant();
             return new TsaVerificationResult(true, tsaInstant,
                 "Jeton TSA valide : horodatage certifié le " + tsaInstant + " par " + props.url());
 
@@ -194,6 +220,29 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
             log.warn("Impossible de charger le certificat de confiance TSA configuré ({})", props.certPath(), e);
             return null;
         }
+    }
+
+    /** Vrai si le certificat revendique l'Extended Key Usage id-kp-timeStamping (RFC 3161 §2.3). */
+    private boolean hasTimestampingEku(X509CertificateHolder cert) {
+        try {
+            Extension ext = cert.getExtensions() != null
+                ? cert.getExtensions().getExtension(Extension.extendedKeyUsage)
+                : null;
+            if (ext == null) {
+                return false;
+            }
+            ExtendedKeyUsage eku = ExtendedKeyUsage.getInstance(ext.getParsedValue());
+            return eku.hasKeyPurposeId(KeyPurposeId.id_kp_timeStamping);
+        } catch (Exception e) {
+            log.warn("Impossible de lire l'Extended Key Usage du certificat signataire TSA", e);
+            return false;
+        }
+    }
+
+    /** Vrai si `instant` tombe dans la période de validité (notBefore/notAfter) du certificat. */
+    private boolean isValidAt(X509CertificateHolder cert, Instant instant) {
+        Date date = Date.from(instant);
+        return !date.before(cert.getNotBefore()) && !date.after(cert.getNotAfter());
     }
 
     /** Vérifie que `cert` a bien été signé par la clé privée correspondant à `issuer`. */

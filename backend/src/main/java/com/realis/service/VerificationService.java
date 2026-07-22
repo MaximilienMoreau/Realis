@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,7 +41,10 @@ public class VerificationService {
      * Le hash est calculé sur les octets bruts du fichier uploadé, sans ré-encodage.
      */
     public VerificationResponse verify(MultipartFile file, UUID recordId) throws IOException {
-        String uploadedHash = hashService.sha256Hex(file.getInputStream());
+        String uploadedHash;
+        try (InputStream in = file.getInputStream()) {
+            uploadedHash = hashService.sha256Hex(in);
+        }
         log.debug("Vérification : hash calculé = {}", uploadedHash);
 
         if (recordId != null) {
@@ -57,6 +61,12 @@ public class VerificationService {
      * Si le recordId ne correspond à aucun enregistrement, on retombe sur le même
      * contrat que le mode 2 (verdict INCONNU) plutôt que de laisser fuiter une
      * ResourceNotFoundException : le client reçoit toujours un VerificationResponse.
+     *
+     * Contrairement au mode 2, la recherche se fait par findById (pas findActiveBy...) :
+     * un enregistrement supprimé logiquement par son propriétaire peut donc toujours
+     * renvoyer AUTHENTIQUE si le hash correspond (le hash cryptographique reste valide
+     * après suppression). C'est signalé via record.deleted/record.warning dans la
+     * réponse — voir la Javadoc de VerificationResponse.
      */
     private VerificationResponse verifyAgainstRecord(String uploadedHash, UUID recordId) {
         Optional<SealedRecord> found = sealedRecordRepository.findById(recordId);
