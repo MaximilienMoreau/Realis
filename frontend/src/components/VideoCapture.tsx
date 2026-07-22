@@ -38,16 +38,21 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
   const [errorMsg, setErrorMsg] = useState("");
   const [facingBack, setFacingBack] = useState(true);
 
-  const videoRef    = useRef<HTMLVideoElement>(null);
-  const streamRef   = useRef<MediaStream | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef   = useRef<BlobPart[]>([]);
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoRef        = useRef<HTMLVideoElement>(null);
+  const streamRef       = useRef<MediaStream | null>(null);
+  const recorderRef     = useRef<MediaRecorder | null>(null);
+  const chunksRef       = useRef<BlobPart[]>([]);
+  const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const toggleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       stopStream();
       if (timerRef.current) clearInterval(timerRef.current);
+      // Sans ça, un activateCamera() en attente (déclenché par toggleCamera) s'exécuterait
+      // après le démontage : la caméra se rallumerait sans qu'aucun flux ne soit jamais
+      // arrêté (le voyant caméra resterait allumé après avoir quitté la page).
+      if (toggleTimeoutRef.current) clearTimeout(toggleTimeoutRef.current);
     };
   }, []);
 
@@ -155,7 +160,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
     setState("idle");
     // On passe `next` explicitement : `activateCamera` par défaut lirait `facingBack`
     // depuis la closure de ce rendu, donc encore l'ancienne valeur au moment du timeout.
-    setTimeout(() => activateCamera(next), 200);
+    toggleTimeoutRef.current = setTimeout(() => activateCamera(next), 200);
   };
 
   return (

@@ -171,11 +171,11 @@ Toute erreur renvoie un corps JSON homogène :
 
 | Code | Cas |
 |:---|:---|
-| `400` | Requête invalide (validation, email déjà utilisé) |
+| `400` | Requête invalide (validation) |
 | `401` | JWT absent, invalide ou expiré |
 | `403` | Accès à une ressource dont on n'est pas propriétaire |
 | `404` | Ressource introuvable |
-| `409` | Conflit (ex. suppression d'un enregistrement déjà supprimé, email déjà pris en cas de course concurrente) |
+| `409` | Conflit (ex. suppression d'un enregistrement déjà supprimé, email déjà utilisé) |
 | `413` | Fichier trop volumineux (> 500 Mo) |
 | `429` | Trop de tentatives (`/api/auth/login`, `/api/auth/register`, `/api/verify`) |
 | `503` | TSA (FreeTSA) temporairement indisponible |

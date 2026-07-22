@@ -4,6 +4,7 @@ import com.realis.dto.LoginRequest;
 import com.realis.dto.RegisterRequest;
 import com.realis.dto.AuthResponse;
 import com.realis.config.NetworkProperties;
+import com.realis.exception.ConflictException;
 import com.realis.exception.TooManyRequestsException;
 import com.realis.model.User;
 import com.realis.repository.UserRepository;
@@ -67,14 +68,14 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("register() : email déjà utilisé → IllegalArgumentException")
-    void register_duplicateEmail_throwsIllegalArgumentException() {
+    @DisplayName("register() : email déjà utilisé → ConflictException")
+    void register_duplicateEmail_throwsConflictException() {
         when(userRepository.existsByEmail("test@realis.fr")).thenReturn(true);
 
         RegisterRequest request = new RegisterRequest("test@realis.fr", "motdepasse123");
 
         assertThatThrownBy(() -> controller.register(request, httpRequest))
-            .isInstanceOf(IllegalArgumentException.class);
+            .isInstanceOf(ConflictException.class);
     }
 
     @Test

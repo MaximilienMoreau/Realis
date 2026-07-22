@@ -3,6 +3,7 @@ package com.realis.controller;
 import com.realis.dto.AuthResponse;
 import com.realis.dto.LoginRequest;
 import com.realis.dto.RegisterRequest;
+import com.realis.exception.ConflictException;
 import com.realis.exception.TooManyRequestsException;
 import com.realis.model.User;
 import com.realis.repository.UserRepository;
@@ -41,7 +42,11 @@ public class AuthController {
         checkRateLimit("register", httpRequest);
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("Un compte existe déjà pour cet email");
+            // ConflictException (409), pas IllegalArgumentException (400) : c'est le même
+            // problème métier ("compte existant") que celui remonté par la contrainte UNIQUE
+            // en base lors d'une course d'inscription (voir GlobalExceptionHandler,
+            // DataIntegrityViolationException) ; les deux chemins doivent renvoyer le même code.
+            throw new ConflictException("Un compte existe déjà pour cet email");
         }
         User user = User.builder()
             .email(email)
