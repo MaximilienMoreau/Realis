@@ -73,18 +73,27 @@ public class StorageService {
 
         Cipher cipher = initCipher(Cipher.ENCRYPT_MODE, iv);
 
-        try (InputStream  in      = Files.newInputStream(tempFile);
-             OutputStream rawOut  = Files.newOutputStream(destFile)) {
+        try {
+            try (InputStream  in      = Files.newInputStream(tempFile);
+                 OutputStream rawOut  = Files.newOutputStream(destFile)) {
 
-            rawOut.write(iv);
+                rawOut.write(iv);
 
-            try (CipherOutputStream cipherOut = new CipherOutputStream(rawOut, cipher)) {
-                byte[] buffer = new byte[BUFFER_SIZE];
-                int read;
-                while ((read = in.read(buffer)) != -1) {
-                    cipherOut.write(buffer, 0, read);
+                try (CipherOutputStream cipherOut = new CipherOutputStream(rawOut, cipher)) {
+                    byte[] buffer = new byte[BUFFER_SIZE];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) {
+                        cipherOut.write(buffer, 0, read);
+                    }
                 }
             }
+        } catch (Exception e) {
+            // destFile a pu être créé (et partiellement écrit) avant l'échec : sans ce
+            // nettoyage, l'appelant ne connaît le chemin qu'une fois cette méthode retournée
+            // avec succès, et ne peut donc pas supprimer un fichier orphelin issu d'un échec
+            // survenu ici (disque plein, erreur de cipher...).
+            Files.deleteIfExists(destFile);
+            throw e;
         }
 
         return destFile.toAbsolutePath().toString();

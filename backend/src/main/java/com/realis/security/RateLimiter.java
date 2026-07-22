@@ -8,9 +8,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Limiteur de débit en mémoire, fenêtre fixe glissante par minute.
- * Suffisant pour une instance unique (MVP) ; à remplacer par un backend partagé
- * (ex. Redis) si le backend est un jour répliqué.
+ * Limiteur de débit en mémoire, fenêtre fixe par minute (pas glissante : un client peut
+ * en théorie émettre jusqu'à 2× maxAttemptsPerMinute en rafale à cheval sur une frontière
+ * de fenêtre). Suffisant pour une instance unique (MVP) ; à remplacer par un backend
+ * partagé (ex. Redis) si le backend est un jour répliqué.
  *
  * Une clé est créée par (scope, IP) rencontrée. Sans purge, cette map grossirait
  * indéfiniment (une IP différente = une entrée qui ne disparaît jamais). Un balayage

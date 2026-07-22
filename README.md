@@ -197,7 +197,7 @@ Toute erreur renvoie un corps JSON homogène :
 | Chiffrement at rest | AES-256-GCM par capture, clé injectée via `ENCRYPTION_KEY` (jamais commitée) |
 | Rate-limiting | Fenêtre fixe en mémoire, par IP, sur `/api/auth/**` et `/api/verify` |
 | Immuabilité | Trigger PostgreSQL interdisant toute modification ou suppression physique d'un `sealed_record` (seule `deleted_at` peut être posé) |
-| Horodatage | Chaîne de confiance TSA vérifiée localement (`TSA_CERT_PATH`), pas seulement la signature du jeton |
+| Horodatage | Chaîne de confiance TSA vérifiée localement (`TSA_CERT_PATH`), Extended Key Usage `timeStamping` et période de validité du certificat contrôlées, pas seulement la signature du jeton |
 
 </div>
 
@@ -237,13 +237,21 @@ FRONTEND_URL=http://localhost:3000 \
 mvn spring-boot:run
 ```
 
-`TSA_PROVIDER`, `TSA_URL` et `TRUST_FORWARDED_FOR` ont des valeurs par défaut
-raisonnables (voir `application.yml`) et peuvent être omis. Attention en revanche
-à `TSA_CERT_PATH` : sa valeur par défaut (`/app/tsa-certs/freetsa-ca.crt`) est un
-chemin absolu valide uniquement dans le conteneur Docker. Hors Docker, pointez-le
-vers le fichier versionné du dépôt, ex. `TSA_CERT_PATH=$(pwd)/src/main/resources/tsa-certs/freetsa-ca.crt`,
+`TSA_URL` et `TRUST_FORWARDED_FOR` ont des valeurs par défaut raisonnables (voir
+`application.yml`) et peuvent être omis. Attention en revanche à `TSA_CERT_PATH` :
+sa valeur par défaut (`/app/tsa-certs/freetsa-ca.crt`) est un chemin absolu valide
+uniquement dans le conteneur Docker. Hors Docker, pointez-le vers le fichier
+versionné du dépôt, ex. `TSA_CERT_PATH=$(pwd)/src/main/resources/tsa-certs/freetsa-ca.crt`,
 sans quoi la vérification TSA locale se fait sans ancre de confiance (avertissement
 en log, pas d'échec).
+
+`TSA_PROVIDER` vaut `freetsa` par défaut et n'a normalement pas besoin d'être
+défini. Seules les valeurs `freetsa` et `noop` sont acceptées ; toute autre
+valeur (ex. faute de frappe) fait échouer le démarrage plutôt que de basculer
+silencieusement sur le no-op — l'horodatage RFC 3161 étant la valeur centrale
+de Realis, cet échec est volontaire. `noop` doit être choisi explicitement (ex.
+environnement de développement sans accès réseau à une TSA) : ne jamais l'utiliser
+en production.
 
 ### Frontend
 
@@ -286,7 +294,11 @@ openssl ts -verify -in token.tsr -data fichier_original.webm \
 
 ## RGPD
 
-- Consentement granulaire (géoloc opt-in) horodaté avant toute capture.
+- Consentement granulaire (géoloc opt-in) horodaté avant toute capture. Le texte
+  de consentement précise explicitement que la position GPS, si incluse, sera
+  visible par quiconque dispose du lien du certificat (`/api/verify/**` est
+  public par conception — voir [Endpoints principaux](#endpoints-principaux)) :
+  ce n'est pas une donnée réservée au propriétaire du scellement.
 - Les captures sont chiffrées at rest (AES-256-GCM).
 - Endpoint de suppression logique disponible (avec avertissement : la suppression invalide la preuve).
 - Minimisation des données : seuls les champs nécessaires à la preuve sont collectés.
