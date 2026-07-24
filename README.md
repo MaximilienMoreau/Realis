@@ -205,6 +205,21 @@ Toute erreur renvoie un corps JSON homogène :
 
 ## Développement local (sans Docker)
 
+### Démarrage rapide
+
+```bash
+make dev        # lance postgres + backend (profil local) + frontend
+make dev-reset  # remet la DB à zéro et relance (résout les erreurs de mot de passe)
+make stop       # arrête tout
+```
+
+`make dev` (via `dev.sh`) attend qu'un Postgres réponde sur `localhost:5432`
+(db `realis`, user/mdp `realis_user` / `realis_dev_password` — voir
+`application-local.yml`), puis lance backend et frontend en parallèle dans le
+même terminal (Ctrl+C arrête les deux). Pour contrôler chaque étape
+individuellement, ou pour une configuration différente du profil `local`, voir
+le détail ci-dessous.
+
 ### Backend
 
 **Option A — profil `local` (le plus rapide)**

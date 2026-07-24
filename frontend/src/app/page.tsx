@@ -1,3 +1,5 @@
+import ApiStatus from "@/components/ApiStatus";
+
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4">
@@ -49,26 +51,4 @@ export default function Home() {
       </div>
     </main>
   );
-}
-
-async function ApiStatus() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-
-  try {
-    const res = await fetch(`${apiUrl}/api/health`, {
-      next: { revalidate: 30 },
-    });
-    const data = (await res.json()) as { status: string; timestamp: string };
-    return (
-      <p className="text-xs text-green-600 dark:text-green-400">
-        Backend : {data.status} · {data.timestamp}
-      </p>
-    );
-  } catch {
-    return (
-      <p className="text-xs text-red-400 dark:text-red-500">
-        Backend inaccessible : vérifiez docker-compose
-      </p>
-    );
-  }
 }
