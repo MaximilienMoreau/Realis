@@ -17,6 +17,10 @@ import java.util.UUID;
 @AllArgsConstructor
 public class SealedRecord {
 
+    public boolean isAvailable() {
+        return deletedAt == null && sealedAt.plus(365, java.time.temporal.ChronoUnit.DAYS).isAfter(Instant.now());
+    }
+
     @Id
     private UUID id;
 

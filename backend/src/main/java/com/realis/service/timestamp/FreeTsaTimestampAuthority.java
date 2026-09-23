@@ -37,7 +37,7 @@ import java.util.Date;
  *   4. Retourne le jeton DER brut + l'instant certifié
  *
  * Vérification indépendante (sans accès à la DB Realis) :
- *   openssl ts -verify -in token.tsr -data fichier_original.webm -CAfile freetsa-ca.crt
+ *   openssl ts -verify -token_in -in token.tsr -data fichier_original.webm -CAfile freetsa-ca.crt
  *
  * La classe peut aussi être utilisée avec toute TSA compatible RFC 3161
  * en changeant TSA_URL dans la configuration.
@@ -82,6 +82,8 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
 
             org.bouncycastle.tsp.TimeStampToken bcToken = response.getTimeStampToken();
             byte[] tokenDer    = bcToken.getEncoded();
+            TsaVerificationResult verified = verify(tokenDer, sha256Bytes);
+            if (!verified.valid()) throw new TimestampException(verified.message());
             Instant tsaInstant = bcToken.getTimeStampInfo().getGenTime().toInstant();
 
             log.info("Horodatage obtenu : certifié le {} par {}", tsaInstant, props.url());
@@ -131,6 +133,9 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
                 new org.bouncycastle.tsp.TimeStampToken(signedData);
 
             // (a) Vérification de l'intégrité du fichier
+            if (!TSPAlgorithms.SHA256.equals(bcToken.getTimeStampInfo().getMessageImprintAlgOID())) {
+                return new TsaVerificationResult(false, null, "Algorithme TSA différent de SHA-256.");
+            }
             byte[] tokenHash = bcToken.getTimeStampInfo().getMessageImprintDigest();
             if (!Arrays.equals(tokenHash, sha256Bytes)) {
                 return new TsaVerificationResult(false, null,
@@ -153,16 +158,9 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
 
             // (b) Chaîne de confiance vers l'autorité configurée localement
             X509CertificateHolder trustedRoot = loadTrustedRoot();
-            if (trustedRoot != null) {
-                if (!isIssuedBy(signerCert, trustedRoot)) {
-                    return new TsaVerificationResult(false, null,
-                        "Le certificat signataire du jeton TSA n'est pas émis par l'autorité de " +
-                        "confiance configurée (" + props.certPath() + ") : jeton rejeté.");
-                }
-            } else {
-                log.warn("Aucune ancre de confiance TSA lisible ({}) : le certificat embarqué dans " +
-                    "le jeton est utilisé sans validation de chaîne. À corriger avant mise en production.",
-                    props.certPath());
+            if (!isIssuedBy(signerCert, trustedRoot)) {
+                return new TsaVerificationResult(false, null,
+                    "Le signataire ne dépend pas de l'autorité de confiance configurée.");
             }
 
             Instant tsaInstant = bcToken.getTimeStampInfo().getGenTime().toInstant();
@@ -209,16 +207,14 @@ public class FreeTsaTimestampAuthority implements TimestampAuthority {
     }
 
     /** Ancre de confiance locale (racine CA FreeTSA), si le fichier configuré existe et est lisible. */
-    private X509CertificateHolder loadTrustedRoot() {
-        Path certPath = Path.of(props.certPath());
-        if (!Files.exists(certPath)) {
-            return null;
-        }
-        try {
-            return new X509CertificateHolder(Files.readAllBytes(certPath));
+    public X509CertificateHolder loadTrustedRoot() {
+        try (InputStream in = Files.newInputStream(Path.of(props.certPath()))) {
+            // CertificateFactory accepts both PEM and DER.
+            var certificate = java.security.cert.CertificateFactory.getInstance("X.509")
+                .generateCertificate(in);
+            return new X509CertificateHolder(certificate.getEncoded());
         } catch (Exception e) {
-            log.warn("Impossible de charger le certificat de confiance TSA configuré ({})", props.certPath(), e);
-            return null;
+            throw new TimestampException("Ancre de confiance TSA absente ou illisible", e);
         }
     }
 

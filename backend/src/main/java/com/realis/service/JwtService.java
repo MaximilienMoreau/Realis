@@ -36,9 +36,14 @@ public class JwtService {
     }
 
     public String generateToken(UUID userId, String email) {
+        return generateToken(userId, email, 0);
+    }
+
+    public String generateToken(UUID userId, String email, int version) {
         return Jwts.builder()
             .subject(userId.toString())
             .claim("email", email)
+            .claim("version", version)
             .issuedAt(new Date())
             .expiration(new Date(System.currentTimeMillis() + props.expirationMs()))
             .signWith(secretKey)
@@ -57,6 +62,11 @@ public class JwtService {
 
     public UUID extractUserId(String token) {
         return UUID.fromString(claims(token).getSubject());
+    }
+
+    public int extractVersion(String token) {
+        Integer version = claims(token).get("version", Integer.class);
+        return version == null ? 0 : version;
     }
 
     public String extractEmail(String token) {

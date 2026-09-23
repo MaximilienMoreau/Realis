@@ -44,6 +44,8 @@ import java.time.format.DateTimeFormatter;
 public class PdfCertificateService {
 
     private final AppProperties appProperties;
+    private final com.realis.service.timestamp.TimestampAuthority authority;
+    private final HashService hashes;
 
     // Palette Realis
     private static final Color REALIS_DARK   = new DeviceRgb(13,  28,  82);
@@ -93,12 +95,18 @@ public class PdfCertificateService {
         doc.add(spacer(10));
 
         doc.add(sectionTitle("PREUVE D'INTÉGRITÉ", bold));
-        boolean tsaActive = !record.getTsaUrl().startsWith("no-op://");
+        boolean tsaActive = false;
+        try {
+            tsaActive = record.getTsaTokenDer().length > 0 && !record.getTsaUrl().startsWith("no-op://") &&
+                authority.verify(record.getTsaTokenDer(), hashes.hexToBytes(record.getSha256Hex())).valid();
+        } catch (com.realis.service.timestamp.TimestampException ignored) { /* fail closed */ }
+        if (!tsaActive) doc.add(new Paragraph("HORODATAGE NON VÉRIFIÉ : ce document ne garantit pas l'antériorité du fichier.")
+            .setFont(bold).setFontSize(10).setFontColor(DELETED_BORDER));
         doc.add(fieldsTable(bold, regular)
             .addRow("Hash SHA-256",   record.getSha256Hex(),                 regular, mono)
             .addRow("Horodatage TSA", DATE_FMT.format(record.getTsaTimestamp()), regular, regular)
             .addRow("Autorité TSA",   record.getTsaUrl(),                    regular, regular)
-            .addRow("Statut TSA",     tsaActive ? "ACTIF (RFC 3161)" : "NON ACTIF (développement)", regular, regular)
+            .addRow("Statut TSA",     tsaActive ? "VÉRIFIÉ (RFC 3161)" : "NON VÉRIFIÉ", regular, regular)
             .table());
         doc.add(spacer(10));
 
@@ -107,8 +115,8 @@ public class PdfCertificateService {
             .addRow("Nom du fichier", record.getFileName(),                  regular, regular)
             .addRow("Taille",         formatSize(record.getFileSizeBytes()),  regular, regular)
             .addRow("Format",         record.getMimeType(),                   regular, regular)
-            .addRow("Géolocalisation", formatGeoloc(record),                 regular, regular)
-            .addRow("Appareil",       nvl(record.getDeviceUa(), "Non renseigné"), regular, regular)
+            .addRow("Géolocalisation", formatGeoloc(record) + " (déclarée)",                 regular, regular)
+            .addRow("Appareil déclaré",       nvl(record.getDeviceUa(), "Non renseigné"), regular, regular)
             .table());
         doc.add(spacer(12));
 
@@ -219,8 +227,10 @@ public class PdfCertificateService {
         cell.add(new Paragraph(
             "Ce certificat constitue une preuve d'intégrité et d'antériorité basée sur un " +
             "hash SHA-256 et un horodatage RFC 3161 (Time-Stamp Protocol). " +
-            "Il atteste que le fichier scellé existait, sous cette forme exacte, " +
+            "Lorsque le statut TSA est VÉRIFIÉ, le jeton atteste que le fichier existait sous cette forme exacte " +
             "à la date certifiée par l'autorité d'horodatage. " +
+            "Le GPS et l’appareil sont déclarés par le client, non couverts par le hash du fichier. " +
+            "L’horodatage ne garantit pas la véracité de la scène filmée. " +
             "Il ne constitue pas un acte authentique au sens juridique " +
             "et ne remplace pas un constat d'huissier."
         ).setFont(regular).setFontSize(8).setFontColor(new DeviceRgb(80, 60, 0)));
@@ -251,7 +261,7 @@ public class PdfCertificateService {
         cell.add(new Paragraph("Vérification locale sans dépendance à Realis (openssl) :")
             .setFont(regular).setFontSize(8).setMarginBottom(2));
         cell.add(new Paragraph(
-            "openssl ts -verify -in token.tsr -data " + record.getFileName() + " -CAfile freetsa-ca.crt"
+            "openssl ts -verify -token_in -in token.tsr -data original.bin -CAfile tsa-ca.crt"
         ).setFont(mono).setFontSize(7.5f).setFontColor(MONO_COLOR)
             .setMarginBottom(4));
 

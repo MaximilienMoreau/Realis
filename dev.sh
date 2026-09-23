@@ -13,6 +13,11 @@ set -a
 source .env
 set +a
 
+# Local paths differ from the Docker deployment. No untracked Spring profile is needed.
+export DB_URL="${DB_URL:-jdbc:postgresql://localhost:5432/realis}"
+export SMTP_HOST="${SMTP_HOST:-localhost}"
+export SMTP_PORT="${SMTP_PORT:-1025}"
+
 # Vérifie que postgres est accessible (natif ou Docker)
 echo "Vérification de postgres sur localhost:5432..."
 for i in $(seq 1 15); do

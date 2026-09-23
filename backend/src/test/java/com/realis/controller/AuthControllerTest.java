@@ -33,6 +33,7 @@ import static org.mockito.Mockito.*;
 @DisplayName("AuthController : inscription et connexion")
 class AuthControllerTest {
 
+    @Mock private com.realis.service.AccountService accounts;
     @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtService jwtService;
@@ -44,7 +45,7 @@ class AuthControllerTest {
     @BeforeEach
     void setUp() {
         ClientIpResolver clientIpResolver = new ClientIpResolver(new NetworkProperties(false));
-        controller = new AuthController(userRepository, passwordEncoder, jwtService, rateLimiter, clientIpResolver);
+        controller = new AuthController(userRepository, passwordEncoder, jwtService, rateLimiter, clientIpResolver, accounts);
         when(httpRequest.getRemoteAddr()).thenReturn("203.0.113.1");
         when(rateLimiter.tryAcquire(any(), anyInt())).thenReturn(true);
     }
@@ -58,7 +59,7 @@ class AuthControllerTest {
             return User.builder().id(UUID.randomUUID()).email(u.getEmail()).passwordHash(u.getPasswordHash()).build();
         });
         when(passwordEncoder.encode("motdepasse123")).thenReturn("hashed");
-        when(jwtService.generateToken(any(), any())).thenReturn("jwt-token");
+        when(jwtService.generateToken(any(), any(), anyInt())).thenReturn("jwt-token");
 
         RegisterRequest request = new RegisterRequest("Test@Realis.FR", "motdepasse123");
         ResponseEntity<AuthResponse> response = controller.register(request, httpRequest);
@@ -96,7 +97,7 @@ class AuthControllerTest {
         User user = User.builder().id(UUID.randomUUID()).email("test@realis.fr").passwordHash("hashed").build();
         when(userRepository.findByEmail("test@realis.fr")).thenReturn(Optional.of(user));
         when(passwordEncoder.matches("motdepasse123", "hashed")).thenReturn(true);
-        when(jwtService.generateToken(any(), any())).thenReturn("jwt-token");
+        when(jwtService.generateToken(any(), any(), anyInt())).thenReturn("jwt-token");
 
         LoginRequest request = new LoginRequest("Test@Realis.FR", "motdepasse123");
         ResponseEntity<AuthResponse> response = controller.login(request, httpRequest);

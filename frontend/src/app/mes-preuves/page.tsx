@@ -1,123 +1,73 @@
 "use client";
-
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { listMySeals, deleteSeal, AuthExpiredError, type SealResponse } from "@/lib/api";
-import { isAuthenticated } from "@/lib/auth";
-
+import { api, listMySeals, deleteSeal, downloadProof, type ProofPage, type ProofItem } from "@/lib/api";
 export default function MesPreuvesPage() {
-  const [records, setRecords]           = useState<SealResponse[] | null>(null);
-  const [error, setError]               = useState<string | null>(null);
-  const [loading, setLoading]           = useState(true);
-  const [deletingId, setDeletingId]     = useState<string | null>(null);
-  const [deleteError, setDeleteError]   = useState<string | null>(null);
-
+  const [data, setData] = useState<ProofPage | null>(null);
+  const [query, setQuery] = useState("");
+  const [folder, setFolder] = useState("");
+  const [page, setPage] = useState(0);
+  const [refresh, setRefresh] = useState(0);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [editing, setEditing] = useState<ProofItem | null>(null);
+  const [title, setTitle] = useState("");
+  const [newFolder, setNewFolder] = useState("");
   useEffect(() => {
-    if (!isAuthenticated()) {
-      setError("Vous devez être connecté pour voir vos preuves.");
-      setLoading(false);
-      return;
-    }
-    listMySeals()
-      .then(setRecords)
-      .catch((err) => setError(err instanceof AuthExpiredError ? err.message : "Erreur lors du chargement"))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleDelete = async (id: string, fileName: string) => {
-    if (!window.confirm(
-      `Supprimer définitivement la preuve « ${fileName} » ?\n\n` +
-      "Cette action invalide la preuve d'intégrité et ne peut pas être annulée."
-    )) return;
-
-    setDeleteError(null);
-    setDeletingId(id);
-    try {
-      await deleteSeal(id);
-      setRecords((prev) => prev?.filter((r) => r.id !== id) ?? null);
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : "Erreur lors de la suppression");
-    } finally {
-      setDeletingId(null);
-    }
+    let active = true; setLoading(true); setError("");
+    const timer = setTimeout(() => {
+      listMySeals(query, folder, page).then(result => { if (active) setData(result); })
+        .catch(err => { if (active) setError(err.message); }).finally(() => { if (active) setLoading(false); });
+    }, 250);
+    return () => { active = false; clearTimeout(timer); };
+  }, [query, folder, page, refresh]);
+  const run = async (id: string, task: () => Promise<void>) => {
+    setBusy(id); setError("");
+    try { await task(); } catch (err) { setError(err instanceof Error ? err.message : "La demande a échoué"); }
+    finally { setBusy(null); }
   };
-
-  return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10 px-4">
-      <div className="max-w-xl mx-auto space-y-6">
-
-        <div className="text-center space-y-1">
-          <a href="/" className="text-sm text-realis-500 dark:text-realis-400 hover:underline">← Realis</a>
-          <h1 className="text-2xl font-bold text-realis-700 dark:text-realis-300">Mes preuves</h1>
-        </div>
-
-        {loading && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-10 flex justify-center">
-            <div className="w-8 h-8 rounded-full border-4 border-realis-200 dark:border-realis-800 border-t-realis-600 animate-spin" />
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-2xl p-6 text-center text-sm space-y-3">
-            <p>{error}</p>
-            <a href="/nouveau" className="inline-block text-realis-600 dark:text-realis-400 hover:underline">
-              Se connecter →
-            </a>
-          </div>
-        )}
-
-        {records && records.length === 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-8 text-center text-sm text-gray-400 dark:text-gray-500">
-            Aucune preuve scellée pour l&apos;instant.
-            <br />
-            <a href="/nouveau" className="text-realis-600 dark:text-realis-400 hover:underline">
-              Créer un état des lieux →
-            </a>
-          </div>
-        )}
-
-        {deleteError && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-3 text-sm">
-            {deleteError}
-          </div>
-        )}
-
-        {records && records.length > 0 && (
-          <ul className="space-y-3">
-            {records.map((r) => (
-              <li
-                key={r.id}
-                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700
-                           shadow-sm p-4 hover:border-realis-300 dark:hover:border-realis-600 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <a href={`/certificat/${r.id}`} className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${r.tsaActive ? "bg-green-500" : "bg-amber-400"}`} />
-                      <p className="font-medium text-sm text-realis-700 dark:text-realis-300 truncate">{r.fileName}</p>
-                    </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{fmt(r.sealedAt)}</p>
-                    <p className="mt-2 font-mono text-[11px] text-gray-400 dark:text-gray-500 break-all">{r.sha256Hex}</p>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(r.id, r.fileName)}
-                    disabled={deletingId === r.id}
-                    title="Supprimer définitivement cette preuve"
-                    className="flex-shrink-0 text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300
-                               disabled:opacity-40 transition-colors"
-                  >
-                    {deletingId === r.id ? "…" : "Supprimer"}
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </main>
-  );
-}
-
-function fmt(iso: string): string {
-  return new Date(iso).toLocaleString("fr-FR", { timeZone: "UTC" }) + " UTC";
+  return <main className="max-w-3xl mx-auto p-6 space-y-6">
+    <nav className="flex flex-wrap gap-4 text-sm underline"><Link href="/">Realis</Link><Link href="/nouveau">Nouvelle capture</Link><Link href="/compte">Mon compte</Link></nav>
+    <h1 className="text-2xl font-bold">Mes preuves</h1>
+    <div className="grid gap-4 sm:grid-cols-2">
+      <label>Rechercher<input type="search" className="field" placeholder="Titre, dossier ou fichier" value={query} maxLength={160} onChange={e => {setQuery(e.target.value); setPage(0);}} /></label>
+      <label>Dossier<input className="field" placeholder="Tous les dossiers" value={folder} maxLength={160} onChange={e => {setFolder(e.target.value); setPage(0);}} /></label>
+    </div>
+    {error && <div role="alert" className="panel text-red-700"><p>{error}</p><Link href="/compte" className="underline">Mon compte / Connexion</Link></div>}
+    {loading && <p role="status">Chargement…</p>}
+    {!loading && data?.content.length === 0 && <p>Aucune preuve pour cette recherche.</p>}
+    {editing && <form className="panel" onSubmit={e => {e.preventDefault(); run(editing.record.id, async () => {
+      await api(`/api/seal/${editing.record.id}/labels`, "PATCH", {title, folder: newFolder}); setEditing(null); setRefresh(x => x + 1);
+    });}}>
+      <h2 className="font-semibold">Classer cette preuve</h2>
+      <p className="text-sm">Le titre et le dossier sont privés. Ils ne modifient pas le fichier scellé.</p>
+      <label>Titre<input className="field" maxLength={160} value={title} onChange={e => setTitle(e.target.value)} /></label>
+      <label>Dossier / logement<input className="field" maxLength={160} value={newFolder} onChange={e => setNewFolder(e.target.value)} /></label>
+      <div className="flex gap-4"><button disabled={!!busy} className="action">Enregistrer</button><button type="button" onClick={() => setEditing(null)}>Annuler</button></div>
+    </form>}
+    <ul className="space-y-4">{data?.content.map(item => {
+      const r = item.record;
+      return <li key={r.id} className="panel">
+        <Link className="font-semibold text-realis-600" href={`/certificat/${r.id}`}>{item.title || r.fileName}</Link>
+        {item.folder && <button className="block underline text-sm" onClick={() => {setFolder(item.folder); setPage(0);}}>{item.folder}</button>}
+        <p className="text-sm">{new Date(r.sealedAt).toLocaleString("fr-FR")} · {(r.fileSizeBytes / 1048576).toFixed(1)} Mo</p>
+        <p className="text-xs">{r.tsaActive ? "Jeton d’horodatage disponible" : "Sans horodatage certifié"} · Conservation jusqu’au {new Date(new Date(r.sealedAt).getTime() + 365 * 86400000).toLocaleDateString("fr-FR")}</p>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <button disabled={!!busy} className="underline" onClick={() => run(r.id, () => downloadProof(r.id, "original", r.fileName))}>Vidéo originale</button>
+          <button disabled={!!busy} className="underline" onClick={() => run(r.id, () => downloadProof(r.id, "export", r.fileName))}>Exporter la preuve (.zip)</button>
+          <button disabled={!!busy} className="underline" onClick={() => {setEditing(item); setTitle(item.title); setNewFolder(item.folder);}}>Classer / Renommer</button>
+          <button disabled={!!busy} className="text-red-700" onClick={() => {
+            if (!confirm("Retirer cette preuve et effacer sa capture ? Téléchargez l’archive avant de continuer. Cette action est définitive.")) return;
+            run(r.id, async () => { await deleteSeal(r.id); setPage(0); setRefresh(x => x + 1); });
+          }}>Supprimer</button>
+        </div>{busy === r.id && <p role="status">Opération en cours…</p>}
+      </li>;
+    })}</ul>
+    {data && data.totalPages > 1 && <nav className="flex justify-between items-center" aria-label="Pagination">
+      <button disabled={page === 0 || loading} onClick={() => setPage(p => p - 1)}>← Précédent</button>
+      <span>{page + 1} / {data.totalPages}</span>
+      <button disabled={page + 1 >= data.totalPages || loading} onClick={() => setPage(p => p + 1)}>Suivant →</button>
+    </nav>}
+  </main>;
 }

@@ -1,6 +1,5 @@
 # Secrets
 .env
-.env.example
 .env.local
 .env.*.local
 backend/src/main/resources/application-local.yml
@@ -32,3 +31,12 @@ Thumbs.db
 
 # Données locales (captures chiffrées — ne jamais committer)
 data/
+
+restored-deployment.env
+backups/
+frontend/test-results/
+frontend/playwright-report/
+backend/.attach_pid*
+
+__pycache__/
+*.pyc

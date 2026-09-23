@@ -1,9 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { getSealRecord, certificateUrl, tsaTokenUrl, type SealResponse } from "@/lib/api";
 
-export default function CertificatPage({ params }: { params: { id: string } }) {
+export default function CertificatPage() {
+  const params = useParams<{ id: string }>();
   const [record, setRecord]   = useState<SealResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -20,7 +23,7 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
       <div className="max-w-xl mx-auto space-y-6">
 
         <div className="text-center space-y-1">
-          <a href="/" className="text-sm text-realis-500 dark:text-realis-400 hover:underline">← Realis</a>
+          <Link href="/" className="text-sm text-realis-500 dark:text-realis-400 hover:underline">← Realis</Link>
           <h1 className="text-2xl font-bold text-realis-700 dark:text-realis-300">Preuve d&apos;intégrité</h1>
         </div>
 
@@ -57,7 +60,7 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
                 <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${record.tsaActive ? "bg-green-500" : "bg-amber-400"}`} />
                 <div>
                   <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                    Horodatage RFC 3161 : {record.tsaActive ? "ACTIF" : "NON ACTIF (développement)"}
+                    Horodatage RFC 3161 : {record.tsaActive ? "JETON DISPONIBLE, À VÉRIFIER" : "NON ACTIF (développement)"}
                   </p>
                   {record.tsaActive && record.tsaTimestamp && (
                     <p className="text-xs text-gray-400 dark:text-gray-500">{fmt(record.tsaTimestamp)}</p>
@@ -75,7 +78,7 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
                     ["Taille",      formatSize(record.fileSizeBytes)],
                     ["Format",      record.mimeType],
                     ...(record.geolocLat != null && record.geolocLng != null
-                      ? [["Géolocalisation", `${record.geolocLat.toFixed(6)}, ${record.geolocLng.toFixed(6)}`]]
+                      ? [["GPS déclaré", `${record.geolocLat.toFixed(6)}, ${record.geolocLng.toFixed(6)}`]]
                       : []),
                   ] as [string, string][]).map(([label, value]) => (
                     <tr key={label}>
@@ -104,13 +107,13 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
                 >
                   Télécharger le certificat PDF
                 </a>
-                <a
+                <Link
                   href={`/verifier?recordId=${record.id}`}
                   className="block w-full py-2.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700
                              font-medium rounded-xl transition-colors text-center text-sm"
                 >
                   Vérifier ce fichier
-                </a>
+                </Link>
               </div>
             </div>
 
@@ -122,9 +125,9 @@ export default function CertificatPage({ params }: { params: { id: string } }) {
                 Le token TSA (.tsr) peut être vérifié hors-ligne avec OpenSSL :
               </p>
               <pre className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 text-xs text-gray-700 dark:text-gray-300 overflow-x-auto whitespace-pre-wrap">
-                {`openssl ts -verify \\
+                {`openssl ts -verify -token_in \\
   -in realis-tsa-${record.id}.tsr \\
-  -data ${record.fileName} \\
+  -data fichier-original \\
   -CAfile freetsa-ca.crt`}
               </pre>
               <a

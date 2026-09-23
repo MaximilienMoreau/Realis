@@ -54,8 +54,8 @@ public class VerificationController {
      * Paramètres :
      *  - file     : le fichier à vérifier (obligatoire)
      *  - recordId : UUID de l'enregistrement de référence (optionnel)
-     *               → sans recordId : verdict AUTHENTIQUE ou INCONNU
-     *               → avec recordId : verdict AUTHENTIQUE ou ALTÉRÉ
+     *               → sans recordId : verdict VERIFIE / IDENTIQUE_SANS_HORODATAGE ou INCONNU
+     *               → avec recordId : verdict VERIFIE / IDENTIQUE_SANS_HORODATAGE ou ALTÉRÉ
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<VerificationResponse> verify(
@@ -76,7 +76,7 @@ public class VerificationController {
         VerificationResponse response = verificationService.verify(file, recordId);
 
         HttpStatus status = switch (response.verdict()) {
-            case AUTHENTIQUE -> HttpStatus.OK;
+            case VERIFIE, IDENTIQUE_SANS_HORODATAGE, SUPPRIME -> HttpStatus.OK;
             case ALTERE      -> HttpStatus.OK;   // 200 avec verdict ALTERE dans le corps
             case INCONNU     -> HttpStatus.NOT_FOUND;
         };
@@ -90,14 +90,14 @@ public class VerificationController {
      */
     @GetMapping("/{id}")
     public ResponseEntity<SealResponse> getPublicMetadata(@PathVariable UUID id) {
-        return ResponseEntity.ok(verificationService.getPublicMetadata(id));
+        return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(verificationService.getPublicMetadata(id));
     }
 
     /**
      * Exporte le jeton TSA brut (DER, extension .tsr) d'un enregistrement.
      *
      * Permet une vérification cryptographique totalement indépendante de Realis :
-     *   openssl ts -verify -in token.tsr -data fichier.webm -CAfile freetsa-ca.crt
+     *   openssl ts -verify -token_in -in token.tsr -data fichier.webm -CAfile freetsa-ca.crt
      */
     @GetMapping("/{id}/tsa")
     public ResponseEntity<byte[]> getTsaToken(@PathVariable UUID id) {
@@ -110,6 +110,7 @@ public class VerificationController {
         }
 
         HttpHeaders headers = new HttpHeaders();
+        headers.setCacheControl("no-store");
         headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
         headers.setContentDisposition(
             ContentDisposition.attachment()
@@ -130,9 +131,11 @@ public class VerificationController {
         SealedRecord record = sealedRecordRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Enregistrement introuvable : " + id));
 
+        VerificationService.requireAvailable(record);
         byte[] pdfBytes = pdfCertificateService.generate(record);
 
         HttpHeaders headers = new HttpHeaders();
+        headers.setCacheControl("no-store");
         headers.setContentType(MediaType.APPLICATION_PDF);
         headers.setContentDisposition(
             ContentDisposition.attachment()

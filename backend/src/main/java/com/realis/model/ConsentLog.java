@@ -39,6 +39,12 @@ public class ConsentLog {
     @Column(nullable = false, updatable = false)
     private int retentionDays;
 
+    @Column(updatable = false)
+    private String policyVersion;
+    @Column(nullable = false, updatable = false)
+    @Builder.Default
+    private Instant receivedAt = Instant.now();
+
     @Column(nullable = false, updatable = false)
     @Builder.Default
     private Instant consentedAt = Instant.now();

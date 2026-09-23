@@ -12,3 +12,9 @@
     @apply bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100;
   }
 }
+
+@layer components {
+  .panel { @apply rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 space-y-4; }
+  .field { @apply block w-full mt-1 mb-3 p-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-900; }
+  .action { @apply rounded-xl bg-realis-600 hover:bg-realis-700 text-white px-4 py-3 disabled:opacity-50; }
+}

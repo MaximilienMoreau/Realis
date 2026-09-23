@@ -2,6 +2,19 @@ spring:
   application:
     name: realis-backend
 
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+      mail.smtp.starttls.required: ${SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USER}
@@ -28,7 +41,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 500MB
-      max-request-size: 500MB
+      max-request-size: 501MB
 
 server:
   port: 8080
@@ -57,6 +70,7 @@ realis:
   storage:
     path: ${STORAGE_PATH}
     encryption-key: ${ENCRYPTION_KEY}
+    quota-bytes: ${STORAGE_QUOTA_BYTES:5368709120}
 
   network:
     trust-forwarded-for: ${TRUST_FORWARDED_FOR:false}

@@ -39,6 +39,9 @@ public class SealingService {
     private final ConsentLogRepository consentLogRepository;
     private final SealedRecordRepository sealedRecordRepository;
 
+    @org.springframework.beans.factory.annotation.Value("${realis.storage.quota-bytes:5368709120}")
+    private long quotaBytes = 5368709120L;
+
     /**
      * Flux de scellement complet :
      * 1. Calcul du SHA-256 sur les octets bruts du fichier uploadé
@@ -57,13 +60,13 @@ public class SealingService {
      */
     @Transactional(rollbackFor = Exception.class)
     public SealResponse seal(MultipartFile file, UUID userId, SealRequest request, String clientIp) throws IOException {
-        User user = userRepository.findById(userId)
+        User user = userRepository.lockById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("Utilisateur introuvable : " + userId));
 
-        // Enregistrement du consentement
-        ConsentLog consent = createConsentLog(user, request, clientIp);
-
-        UUID recordId = UUID.randomUUID();
+        if (user.getDeletedAt() != null) throw new SecurityException("Compte supprimé");
+        if (!user.isEmailVerified()) throw new IllegalArgumentException("Vérifiez votre adresse email depuis Mon compte avant de sceller.");
+        ConsentPolicy.validate(request);
+        UUID recordId = request.captureId();
 
         // Calcul du hash + copie vers fichier temporaire en un seul passage
         Path tempFile = Files.createTempFile("realis-seal-", ".tmp");
@@ -77,6 +80,18 @@ public class SealingService {
                 sha256Hex = hashService.sha256AndCopy(uploadIn, tempOut);
             }
             fileSize = Files.size(tempFile);
+            var existing = sealedRecordRepository.findById(recordId);
+            if (existing.isPresent()) {
+                var previous = existing.get();
+                if (!previous.getUser().getId().equals(userId) || !previous.getSha256Hex().equals(sha256Hex)
+                    || !previous.isAvailable())
+                    throw new ConflictException("Identifiant de capture déjà utilisé.");
+                return SealResponse.from(previous);
+            }
+            if (sealedRecordRepository.wasDeleted(recordId)) throw new ConflictException("Identifiant de capture supprimé. Créez une nouvelle capture.");
+            if (fileSize > quotaBytes - sealedRecordRepository.storageUsed(userId))
+                throw new IllegalArgumentException("Quota de stockage atteint. Supprimez des captures ou contactez le support.");
+            ConsentLog consent = createConsentLog(user, request, clientIp);
 
             log.info("Scellement {} : hash SHA-256 calculé ({} octets)", recordId, fileSize);
 
@@ -110,7 +125,20 @@ public class SealingService {
                 .storagePath(storagePath)
                 .build();
 
-            sealedRecordRepository.save(record);
+            // Clean storage even when the database transaction fails during commit.
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                final String stored = storagePath;
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCompletion(int status) {
+                            if (status != STATUS_COMMITTED) {
+                                try { Files.deleteIfExists(Path.of(stored)); }
+                                catch (IOException e) { log.error("Nettoyage après rollback impossible", e); }
+                            }
+                        }
+                    });
+            }
+            sealedRecordRepository.saveAndFlush(record);
 
             log.info("Scellement {} terminé avec succès", recordId);
             return SealResponse.from(record);
@@ -139,6 +167,7 @@ public class SealingService {
         if (!record.getUser().getId().equals(requestingUserId)) {
             throw new SecurityException("Accès refusé");
         }
+        VerificationService.requireAvailable(record);
         return SealResponse.from(record);
     }
 
@@ -148,16 +177,18 @@ public class SealingService {
     @Transactional(readOnly = true)
     public List<SealResponse> listForOwner(UUID requestingUserId) {
         return sealedRecordRepository.findActiveByUserId(requestingUserId).stream()
+            .filter(SealedRecord::isAvailable)
             .map(SealResponse::from)
             .toList();
     }
 
     /**
-     * Suppression logique : invalide la preuve.
+     * Retrait immédiat, effacement physique asynchrone.
      * Un avertissement explicite est inclus dans la réponse.
      */
     @Transactional
     public SealResponse softDelete(UUID id, UUID requestingUserId) {
+        userRepository.lockById(requestingUserId);
         SealedRecord record = sealedRecordRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Enregistrement introuvable : " + id));
 
@@ -178,10 +209,11 @@ public class SealingService {
         ConsentLog consent = ConsentLog.builder()
             .user(user)
             .sessionId(UUID.randomUUID().toString())
-            .geolocConsented(request.geolocLat() != null && request.geolocLng() != null)
-            .purposeText("État des lieux : scellement de capture (MVP). " +
-                         "Conservation 365 jours à des fins de preuve d'intégrité.")
-            .retentionDays(365)
+            .geolocConsented(request.geolocConsented())
+            .purposeText(ConsentPolicy.TEXT)
+            .policyVersion(request.policyVersion())
+            .consentedAt(request.consentedAt())
+            .retentionDays(ConsentPolicy.DAYS)
             .userAgent(request.deviceUa())
             .ipAddress(clientIp)
             .build();
@@ -190,7 +222,9 @@ public class SealingService {
 
     private String resolveFileName(MultipartFile file) {
         String name = file.getOriginalFilename();
-        return (name != null && !name.isBlank()) ? name : "capture.bin";
+        if (name == null || name.isBlank()) return "capture.bin";
+        String safe = name.replaceAll("[\\\\/\\r\\n\\p{Cntrl}]", "_");
+        return safe.substring(0, Math.min(safe.length(), 180));
     }
 
     private String resolveMimeType(MultipartFile file, SealRequest request) {

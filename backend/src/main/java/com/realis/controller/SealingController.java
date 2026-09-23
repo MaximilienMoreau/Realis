@@ -24,6 +24,7 @@ public class SealingController {
 
     private final SealingService sealingService;
     private final ClientIpResolver clientIpResolver;
+    private final com.realis.service.ProofCatalogService catalog;
 
     /**
      * Scelle une capture :
@@ -38,6 +39,11 @@ public class SealingController {
         @RequestParam(value = "geolocLat", required = false) Double  geolocLat,
         @RequestParam(value = "geolocLng", required = false) Double  geolocLng,
         @RequestParam(value = "deviceUa",  required = false) String  deviceUa,
+        @RequestParam UUID captureId,
+        @RequestParam boolean consentAccepted,
+        @RequestParam boolean geolocConsented,
+        @RequestParam String policyVersion,
+        @RequestParam java.time.Instant consentedAt,
         Authentication authentication,
         HttpServletRequest httpRequest
     ) throws IOException {
@@ -45,7 +51,7 @@ public class SealingController {
             throw new IllegalArgumentException("Le fichier ne peut pas être vide");
         }
         UUID userId = (UUID) authentication.getPrincipal();
-        SealRequest request = new SealRequest(mimeType, geolocLat, geolocLng, deviceUa);
+        SealRequest request = new SealRequest(mimeType, geolocLat, geolocLng, deviceUa, captureId, consentAccepted, geolocConsented, policyVersion, consentedAt);
         SealResponse response = sealingService.seal(file, userId, request, clientIpResolver.resolve(httpRequest));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -60,13 +66,19 @@ public class SealingController {
      * Liste les scellements actifs de l'utilisateur connecté (le plus récent en premier).
      */
     @GetMapping
-    public ResponseEntity<List<SealResponse>> list(Authentication authentication) {
-        UUID userId = (UUID) authentication.getPrincipal();
-        return ResponseEntity.ok(sealingService.listForOwner(userId));
+    public com.realis.service.ProofCatalogService.Results list(Authentication auth,
+        @RequestParam(defaultValue="") String q, @RequestParam(defaultValue="") String folder,
+        @RequestParam(defaultValue="0") int page) {
+        return catalog.list((UUID) auth.getPrincipal(), q, folder, page);
+    }
+    public record Labels(String title, String folder) {}
+    @PatchMapping("/{id}/labels")
+    public void labels(@PathVariable UUID id, @RequestBody Labels labels, Authentication auth) {
+        catalog.update((UUID) auth.getPrincipal(), id, labels.title(), labels.folder());
     }
 
     /**
-     * Suppression logique : invalide la preuve définitivement.
+     * Retrait immédiat, suivi d’un effacement par le traitement de conservation.
      * L'identité du demandeur est vérifiée via JWT (doit correspondre au propriétaire).
      */
     @DeleteMapping("/{id}")

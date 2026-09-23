@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
 import ConsentForm, { type ConsentData } from "@/components/ConsentForm";
 import VideoCapture, { type CaptureMetadata } from "@/components/VideoCapture";
 import { registerUser, loginUser, sealCapture, certificateUrl, AuthExpiredError, type SealResponse } from "@/lib/api";
@@ -8,7 +9,9 @@ import { saveAuth, getStoredUser, clearAuth, isAuthenticated } from "@/lib/auth"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Step = "auth" | "consent" | "capture" | "sealing" | "done";
+import { loadDraft, saveDraft, clearDraft, downloadBlob, type CaptureDraft } from "@/lib/draft";
+
+type Step = "auth" | "consent" | "capture" | "review" | "sealing" | "done";
 
 // ── Composant principal ───────────────────────────────────────────────────────
 
@@ -18,36 +21,47 @@ export default function NouveauPage() {
   const [sealResult, setSealResult] = useState<SealResponse | null>(null);
   const [sealError, setSealError]   = useState<string | null>(null);
 
-  const handleAuth = () => { setSealError(null); setStep("consent"); };
-
-  const handleConsent = (data: ConsentData) => {
-    setConsent(data);
-    setStep("capture");
-  };
-
+  const [draft, setDraft] = useState<CaptureDraft | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    loadDraft().then(d => { if (d) { setDraft(d); setConsent(d.consent); } })
+      .catch(() => setSealError("La sauvegarde locale est indisponible. Gardez cette page ouverte et téléchargez la capture avant de l’envoyer."))
+      .finally(() => setReady(true));
+  }, []);
+  useEffect(() => {
+    if (!draft) { setPreview(null); return; }
+    const url = URL.createObjectURL(draft.blob); setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [draft]);
+  const handleAuth = () => { setSealError(null); setStep(draft ? "review" : "consent"); };
+  const handleConsent = (data: ConsentData) => { setConsent(data); setStep("capture"); };
   const handleCaptured = async (blob: Blob, metadata: CaptureMetadata) => {
     if (!consent) return;
-    setStep("sealing");
-    setSealError(null);
+    const next: CaptureDraft = { id: crypto.randomUUID(), owner: getStoredUser()?.userId ?? "", blob, metadata, consent, savedAt: Date.now() };
+    setDraft(next); setStep("review");
+    try { await saveDraft(next); }
+    catch (err) { setSealError(`${err instanceof Error ? err.message : "Sauvegarde impossible"} Téléchargez la vidéo avant de quitter la page.`); }
+  };
+  const upload = async () => {
+    if (!draft) return;
+    if (getStoredUser()?.userId !== draft.owner) { setSealError("Reconnectez-vous au compte qui a enregistré cette capture."); setStep("auth"); return; }
+    setStep("sealing"); setProgress(0); setSealError(null);
     try {
-      const record = await sealCapture({
-        blob,
-        mimeType:  metadata.mimeType,
-        geolocLat: metadata.geolocLat,
-        geolocLng: metadata.geolocLng,
-        deviceUa:  metadata.deviceUa,
-      });
-      setSealResult(record);
-      setStep("done");
+      const record = await sealCapture(draft, setProgress);
+      setSealResult(record); setStep("done");
+      try { await clearDraft(); } catch { setSealError("Preuve enregistrée. Le brouillon local n’a pas pu être effacé ; supprimez les données du site sur cet appareil."); }
+      setDraft(null);
     } catch (err) {
-      if (err instanceof AuthExpiredError) {
-        setSealError(err.message);
-        setStep("auth");
-        return;
-      }
-      setSealError(err instanceof Error ? err.message : "Erreur inattendue lors du scellement.");
-      setStep("capture");
+      setSealError(err instanceof Error ? err.message : "Erreur lors du scellement");
+      setStep(err instanceof AuthExpiredError ? "auth" : "review");
     }
+  };
+  const discard = async () => {
+    if (!window.confirm("Effacer le brouillon de cet appareil ? Téléchargez-le d’abord si vous souhaitez le conserver.")) return;
+    try { await clearDraft(); setDraft(null); setSealError(null); setStep("consent"); }
+    catch { setSealError("Impossible d’effacer le brouillon local."); }
   };
 
   return (
@@ -55,7 +69,7 @@ export default function NouveauPage() {
       <div className="max-w-md mx-auto space-y-6">
 
         <div className="text-center space-y-1">
-          <a href="/" className="text-sm text-realis-500 dark:text-realis-400 hover:underline">← Realis</a>
+          <Link href="/" className="text-sm text-realis-500 dark:text-realis-400 hover:underline">← Realis</Link>
           <h1 className="text-2xl font-bold text-realis-700 dark:text-realis-300">Nouvel état des lieux</h1>
         </div>
 
@@ -68,7 +82,8 @@ export default function NouveauPage() {
         )}
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
-          {step === "auth" && <AuthStep onAuth={handleAuth} />}
+          {!ready && <p>Recherche d’une capture en attente…</p>}
+          {ready && step === "auth" && <AuthStep onAuth={handleAuth} />}
           {step === "consent" && <ConsentForm onConsent={handleConsent} />}
           {step === "capture" && consent && (
             <VideoCapture
@@ -76,7 +91,16 @@ export default function NouveauPage() {
               onCaptured={handleCaptured}
             />
           )}
-          {step === "sealing" && <SealingStep />}
+          {step === "review" && draft && <div className="space-y-4">
+            <h2 className="font-semibold">Capture prête à envoyer</h2>
+            {preview && <video src={preview} controls playsInline className="w-full rounded-xl" />}
+            <p className="text-sm">{(draft.blob.size / 1048576).toFixed(1)} Mo. Le brouillon reste sur cet appareil pour reprendre un envoi interrompu. Il est effacé après succès, ou à la prochaine ouverture après 24 heures.</p>
+            <button className="w-full rounded-xl bg-realis-600 text-white p-3" onClick={upload}>Sceller cette capture</button>
+            <button className="w-full p-2 underline" onClick={() => downloadBlob(draft.blob, `capture.${draft.metadata.mimeType.includes("mp4") ? "mp4" : "webm"}`)}>Télécharger la vidéo avant envoi</button>
+            <Link className="block text-center underline" href="/compte" target="_blank" rel="noreferrer">Vérifier mon email / Mon compte</Link>
+            <button className="w-full p-2 text-red-600" onClick={discard}>Effacer le brouillon</button>
+          </div>}
+          {step === "sealing" && <div aria-live="polite"><SealingStep /><progress className="w-full" max={100} value={progress} /><p>{progress < 100 ? `Envoi : ${progress} %` : "Envoi terminé, horodatage en cours…"}</p></div>}
           {step === "done" && sealResult && <DoneStep record={sealResult} />}
         </div>
 
@@ -101,7 +125,7 @@ const STEPS: { id: Step; label: string }[] = [
 ];
 
 function StepIndicator({ current }: { current: Step }) {
-  const currentIndex = STEPS.findIndex((s) => s.id === current);
+  const currentIndex = STEPS.findIndex((s) => s.id === (current === "review" ? "capture" : current));
   return (
     <div className="flex items-center gap-1">
       {STEPS.map((s, i) => {
@@ -150,13 +174,13 @@ function AuthStep({ onAuth }: { onAuth: () => void }) {
         >
           Continuer
         </button>
-        <a
+        <Link
           href="/mes-preuves"
           className="block w-full py-2.5 text-center text-sm border border-gray-200 dark:border-gray-700
                      text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl transition-colors"
         >
           Voir mes preuves
-        </a>
+        </Link>
         <button
           type="button"
           onClick={() => { clearAuth(); window.location.reload(); }}
@@ -230,8 +254,9 @@ function AuthStep({ onAuth }: { onAuth: () => void }) {
         <input
           type="password"
           required
-          minLength={mode === "register" ? 8 : 1}
-          placeholder={mode === "register" ? "Mot de passe (8 caractères min)" : "Mot de passe"}
+          minLength={mode === "register" ? 12 : 1}
+          maxLength={mode === "register" ? 72 : 128}
+          placeholder={mode === "register" ? "Mot de passe (12 caractères min)" : "Mot de passe"}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm
@@ -239,6 +264,7 @@ function AuthStep({ onAuth }: { onAuth: () => void }) {
                      focus:outline-none focus:ring-2 focus:ring-realis-300 dark:focus:ring-realis-700
                      placeholder:text-gray-300 dark:placeholder:text-gray-500"
         />
+        <Link href="/compte" className="block text-sm underline">Mot de passe oublié / Mon compte</Link>
         <button
           type="submit"
           disabled={loading}
@@ -325,19 +351,19 @@ function DoneStep({ record }: { record: SealResponse }) {
         >
           Télécharger le certificat PDF
         </a>
-        <a
+        <Link
           href={`/certificat/${record.id}`}
           className="block w-full py-2.5 border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700
                      font-medium rounded-xl transition-colors text-center text-sm"
         >
           Voir le détail de la preuve
-        </a>
-        <a
+        </Link>
+        <Link
           href={`/verifier?recordId=${record.id}`}
           className="block w-full py-2.5 text-sm text-realis-500 dark:text-realis-400 hover:underline text-center"
         >
           Vérifier ce fichier →
-        </a>
+        </Link>
       </div>
     </div>
   );

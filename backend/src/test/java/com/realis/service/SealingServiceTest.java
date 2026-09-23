@@ -56,7 +56,7 @@ class SealingServiceTest {
         );
 
         userId = UUID.randomUUID();
-        user = User.builder().id(userId).email("proprio@example.com").passwordHash("x").build();
+        user = User.builder().id(userId).email("proprio@example.com").passwordHash("x").emailVerified(true).build();
     }
 
     // ── seal() ────────────────────────────────────────────────────────────
@@ -64,17 +64,17 @@ class SealingServiceTest {
     @Test
     @DisplayName("seal() : flux complet réussi (hash, stockage, horodatage, sauvegarde)")
     void seal_success_returnsSealResponse() throws IOException {
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.lockById(userId)).thenReturn(Optional.of(user));
         when(consentLogRepository.save(any(ConsentLog.class)))
             .thenAnswer(inv -> inv.getArgument(0));
         when(storageService.encryptAndStore(any(), any(), any())).thenReturn("/data/captures/x.enc");
-        when(sealedRecordRepository.save(any(SealedRecord.class)))
+        when(sealedRecordRepository.saveAndFlush(any(SealedRecord.class)))
             .thenAnswer(inv -> inv.getArgument(0));
 
         MockMultipartFile file = new MockMultipartFile(
             "file", "video.webm", "video/webm", "contenu vidéo".getBytes()
         );
-        SealRequest request = new SealRequest("video/webm", 48.85, 2.35, "Mozilla/5.0");
+        SealRequest request = new SealRequest("video/webm", 48.85, 2.35, "Mozilla/5.0", UUID.randomUUID(), true, true, ConsentPolicy.VERSION, Instant.now());
 
         SealResponse response = service.seal(file, userId, request, "203.0.113.1");
 
@@ -87,19 +87,19 @@ class SealingServiceTest {
         assertThat(response.tsaActive()).isFalse(); // NoOpTimestampAuthority
 
         verify(consentLogRepository).save(any(ConsentLog.class));
-        verify(sealedRecordRepository).save(any(SealedRecord.class));
+        verify(sealedRecordRepository).saveAndFlush(any(SealedRecord.class));
         verify(storageService).encryptAndStore(any(), eq(userId), any());
     }
 
     @Test
     @DisplayName("seal() : utilisateur introuvable → ResourceNotFoundException")
     void seal_unknownUser_throwsResourceNotFound() {
-        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+        when(userRepository.lockById(userId)).thenReturn(Optional.empty());
 
         MockMultipartFile file = new MockMultipartFile(
             "file", "video.webm", "video/webm", "contenu".getBytes()
         );
-        SealRequest request = new SealRequest(null, null, null, null);
+        SealRequest request = new SealRequest(null, null, null, null, UUID.randomUUID(), true, false, ConsentPolicy.VERSION, Instant.now());
 
         assertThatThrownBy(() -> service.seal(file, userId, request, "127.0.0.1"))
             .isInstanceOf(ResourceNotFoundException.class);
@@ -110,15 +110,15 @@ class SealingServiceTest {
     @Test
     @DisplayName("seal() : mimeType et fileName résolus à partir du fichier si absents de la requête")
     void seal_resolvesMimeTypeAndFileNameFromFile() throws IOException {
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(userRepository.lockById(userId)).thenReturn(Optional.of(user));
         when(consentLogRepository.save(any(ConsentLog.class))).thenAnswer(inv -> inv.getArgument(0));
         when(storageService.encryptAndStore(any(), any(), any())).thenReturn("/data/captures/x.enc");
-        when(sealedRecordRepository.save(any(SealedRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(sealedRecordRepository.saveAndFlush(any(SealedRecord.class))).thenAnswer(inv -> inv.getArgument(0));
 
         MockMultipartFile file = new MockMultipartFile(
             "file", "", "video/mp4", "contenu".getBytes()
         );
-        SealRequest request = new SealRequest(null, null, null, null);
+        SealRequest request = new SealRequest(null, null, null, null, UUID.randomUUID(), true, false, ConsentPolicy.VERSION, Instant.now());
 
         SealResponse response = service.seal(file, userId, request, "127.0.0.1");
 

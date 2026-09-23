@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"   # Exposé pour le développement local (mvn spring-boot:run)
+      - "127.0.0.1:5432:5432"   # Exposé pour le développement local (mvn spring-boot:run)
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -30,6 +30,14 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-true}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      REALIS_MAIL_FROM: ${SMTP_FROM:-realis@localhost}
+      STORAGE_QUOTA_BYTES: ${STORAGE_QUOTA_BYTES:-5368709120}
       DB_URL: ${DB_URL}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useRef, useEffect } from "react";
 import { verifyFile, type VerificationResponse, type Verdict } from "@/lib/api";
 
@@ -46,7 +47,7 @@ export default function VerifierPage() {
       <div className="max-w-xl mx-auto space-y-6">
 
         <div className="text-center space-y-1">
-          <a href="/" className="text-sm text-realis-500 dark:text-realis-400 hover:underline">← Realis</a>
+          <Link href="/" className="text-sm text-realis-500 dark:text-realis-400 hover:underline">← Realis</Link>
           <h1 className="text-2xl font-bold text-realis-700 dark:text-realis-300">Vérifier un fichier</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Re-déposez le fichier original pour vérifier son intégrité et son horodatage.
@@ -157,12 +158,13 @@ function VerificationResult({ result }: { result: VerificationResponse }) {
       {result.tsaCheck ? (
         <CheckBlock
           title="(b) Horodatage RFC 3161"
-          passed={result.tsaCheck.valid || result.tsaCheck.isNoOp}
+          passed={result.tsaCheck.valid}
           warning={result.tsaCheck.isNoOp}
           message={result.tsaCheck.message}
         />
       ) : null}
 
+      <p className="text-xs">Cette vérification ne certifie ni la scène filmée ni la position GPS déclarée.</p>
       {result.record && <RecordDetails record={result.record} />}
     </div>
   );
@@ -170,13 +172,17 @@ function VerificationResult({ result }: { result: VerificationResponse }) {
 
 function VerdictBadge({ verdict }: { verdict: Verdict }) {
   const styles: Record<Verdict, string> = {
-    AUTHENTIQUE: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300",
+    VERIFIE: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-800 dark:text-green-300",
+    IDENTIQUE_SANS_HORODATAGE: "bg-amber-50 text-amber-800 border-amber-200",
+    SUPPRIME: "bg-gray-50 text-gray-700 border-gray-200",
     ALTERE:      "bg-red-50  dark:bg-red-900/20  border-red-200  dark:border-red-800  text-red-800  dark:text-red-300",
     INCONNU:     "bg-gray-50 dark:bg-gray-700    border-gray-200 dark:border-gray-600  text-gray-600 dark:text-gray-300",
   };
   const labels: Record<Verdict, string> = {
-    AUTHENTIQUE: "✓ AUTHENTIQUE",
-    ALTERE:      "✗ ALTÉRÉ",
+    VERIFIE: "✓ FICHIER IDENTIQUE ET HORODATAGE VÉRIFIÉ",
+    IDENTIQUE_SANS_HORODATAGE: "FICHIER IDENTIQUE — HORODATAGE NON VÉRIFIÉ",
+    SUPPRIME: "ENREGISTREMENT SUPPRIMÉ OU EXPIRÉ",
+    ALTERE:      "✗ FICHIER DIFFÉRENT",
     INCONNU:     "? INCONNU",
   };
 
