@@ -22,7 +22,6 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
@@ -51,7 +50,9 @@ public class SecurityConfig {
                 .authenticationEntryPoint(jsonAuthenticationEntryPoint(objectMapper))
             )
             .authorizeHttpRequests(auth -> auth
+                .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC).permitAll()
                 .requestMatchers(
+                    "/api/policy",
                     "/api/health",
                     "/actuator/health",
                     "/api/auth/**",
@@ -85,38 +86,14 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder(12);
     }
 
-    /**
-     * Dérive les origines CORS autorisées de realis.app.frontend-url (FRONTEND_URL) plutôt que
-     * d'une liste figée : sinon, tout déploiement avec un FRONTEND_URL en dehors des domaines
-     * codés en dur (autre client, staging sur un domaine distinct...) casse silencieusement
-     * les appels authentifiés du frontend, alors même que FRONTEND_URL est correctement pris
-     * en compte ailleurs (liens absolus dans les certificats PDF, voir PdfCertificateService).
-     *
-     * "http://localhost:3000" reste toujours autorisé pour permettre le développement local
-     * même quand FRONTEND_URL pointe déjà vers un domaine de production.
-     */
+    /** Only the configured frontend origin may call the API from a browser. */
     @Bean
     public CorsConfigurationSource corsConfigurationSource(AppProperties appProperties) {
         CorsConfiguration config = new CorsConfiguration();
 
-        List<String> origins = new ArrayList<>();
-        origins.add("http://localhost:3000");
-
-        String frontendUrl = appProperties.frontendUrl();
-        if (frontendUrl != null && !frontendUrl.isBlank()) {
-            origins.add(frontendUrl);
-
-            // Autorise aussi les sous-domaines du domaine configuré (ex. staging.realis.app
-            // si FRONTEND_URL=https://realis.app) : le "*" de Spring exige un caractère avant
-            // le point, donc le domaine racine doit rester listé explicitement ci-dessus.
-            URI uri = URI.create(frontendUrl);
-            if (uri.getHost() != null && uri.getScheme() != null) {
-                origins.add(uri.getScheme() + "://*." + uri.getHost());
-            }
-        }
-
-        config.setAllowedOriginPatterns(origins);
-        config.setAllowedMethods(List.of("GET", "POST", "DELETE", "OPTIONS"));
+        String origin = URI.create(appProperties.frontendUrl()).toString();
+        config.setAllowedOrigins(List.of(origin));
+        config.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

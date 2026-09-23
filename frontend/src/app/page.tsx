@@ -1,3 +1,4 @@
+import Link from "next/link";
 import ApiStatus from "@/components/ApiStatus";
 
 export default function Home() {
@@ -32,18 +33,18 @@ export default function Home() {
 
         {/* Actions */}
         <div className="flex flex-col gap-3">
-          <a
+          <Link
             href="/nouveau"
             className="w-full py-3 px-6 bg-realis-600 hover:bg-realis-700 text-white font-medium rounded-xl transition-colors"
           >
             Nouvel état des lieux
-          </a>
-          <a
+          </Link>
+          <Link
             href="/verifier"
             className="w-full py-3 px-6 border border-realis-200 dark:border-realis-700 text-realis-600 dark:text-realis-400 hover:bg-realis-50 dark:hover:bg-realis-900/20 font-medium rounded-xl transition-colors"
           >
             Vérifier un fichier
-          </a>
+          </Link>
         </div>
 
         {/* Statut API (dev uniquement) */}

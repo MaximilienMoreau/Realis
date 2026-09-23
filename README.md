@@ -1,336 +1,153 @@
-<div align="center">
-
 # Realis
 
-**Certification du réel**
+Realis conserve des captures vidéo chiffrées et permet de vérifier leur intégrité
+et leur antériorité grâce à SHA-256 et à un horodatage RFC 3161.
+L’horodatage prouve l’existence des octets du fichier ; il ne certifie ni la scène
+filmée, ni la position GPS, ni l’identité de l’appareil déclarées par le client.
 
-Service de certification de l'intégrité et de l'antériorité de captures numériques,
-basé sur un hash SHA-256 et un horodatage cryptographique RFC 3161 (TSP).
+## Fonctionnalités
 
-![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=flat-square&logo=next.js&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3-6DB33F?style=flat-square&logo=springboot&logoColor=white)
-![Java](https://img.shields.io/badge/Java-21-ED8B00?style=flat-square&logo=openjdk&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)
-![RFC 3161](https://img.shields.io/badge/Horodatage-RFC%203161-2D52C4?style=flat-square)
-![Statut](https://img.shields.io/badge/Statut-MVP-lightgrey?style=flat-square)
+- Inscription, connexion, vérification email et réinitialisation du mot de passe.
+- Consentement versionné chargé depuis le serveur avant la capture.
+- Vidéo avec prévisualisation, téléchargement local et brouillon IndexedDB pour
+  reprendre un envoi interrompu ou une session expirée, sans créer de doublon.
+- Scellement SHA-256, vérification de l’autorité TSA **avant** stockage, AES-256-GCM.
+- Titres et dossiers privés, recherche et pagination (20 preuves par page).
+- Téléchargement propriétaire de l’original et d’une archive ZIP autonome.
+- Certificat et vérification publics via un identifiant aléatoire.
+- Suppression, expiration automatique après 365 jours et suppression du compte.
+- Quota de 5 Gio par compte, limitation des envois avant lecture du multipart.
 
-</div>
+Les titres/dossiers peuvent être modifiés sans modifier la preuve. Le GPS et le
+navigateur sont déclaratifs et ne sont pas couverts par l’empreinte du fichier.
+Le PDF distingue un horodatage vérifié d’un horodatage absent ou invalide.
 
-<br>
+## Démarrage
 
-> **Important** : le certificat Realis est une preuve d'intégrité et d'antériorité
-> (hash + horodatage RFC 3161). Il ne constitue pas un acte authentique au sens juridique.
+Prérequis : Docker Compose, ou Java 17/21, Maven, Node 22 et PostgreSQL 16.
 
-<br>
-
-## Sommaire
-
-- [Démarrage rapide](#démarrage-rapide)
-- [Architecture](#architecture)
-- [Endpoints principaux](#endpoints-principaux)
-- [Format des erreurs](#format-des-erreurs)
-- [Sécurité](#sécurité)
-- [Développement local](#développement-local-sans-docker)
-- [Tests](#tests)
-- [Vérification indépendante d'un jeton TSA](#vérification-indépendante-dun-jeton-tsa)
-- [RGPD](#rgpd)
-
-<br>
-
-## Démarrage rapide
-
-### Prérequis
-
-- Docker ≥ 24 et Docker Compose ≥ 2.20
-- `openssl` (pour générer les secrets)
-
-### 1. Configurer l'environnement
-
-```bash
+```sh
 cp .env.example .env
+# Renseigner les mots de passe et générer des secrets distincts :
+openssl rand -base64 48 # JWT_SECRET
+openssl rand -base64 32 # ENCRYPTION_KEY
 ```
 
-Éditer `.env` et remplacer **toutes** les valeurs `CHANGE_ME` :
+Pour tester les emails dans Mailpit, sans envoyer de messages externes :
 
-```bash
-# Générer le secret JWT (minimum 32 caractères)
-openssl rand -base64 48
-
-# Générer la clé de chiffrement AES-256 (32 octets en Base64)
-openssl rand -base64 32
+```sh
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
-### 2. Lancer la stack
+Frontend : http://localhost:3000 ; API : http://localhost:8080 ; boîte mail
+locale : http://localhost:8025. Vérifier l’email avant le premier scellement.
+L’horodatage utilise FreeTSA et nécessite un accès réseau. `TSA_PROVIDER=noop`
+n’est autorisé qu’avec le profil Spring `local` ou `test`, et ne produit jamais
+un verdict d’horodatage vérifié.
 
-```bash
-docker compose up --build
-```
+Sans Docker : configurer dans `.env` `DB_URL=jdbc:postgresql://localhost:5432/realis`,
+`STORAGE_PATH` vers un répertoire local et `TSA_CERT_PATH` vers le chemin absolu du
+certificat du dépôt, puis `make dev`. Le serveur SMTP local doit être disponible
+sur `localhost:1025`, ou remplacé par une configuration SMTP réelle.
 
-<div align="center">
+En production, utiliser HTTPS, renseigner SMTP et appliquer les procédures de
+[sauvegarde, restauration et supervision](docs/operations.md). `make dev-reset`
+n’est pas une commande de migration : elle efface les volumes de développement.
 
-| Service | URL |
-|:---|:---|
-| **Frontend** | [http://localhost:3000](http://localhost:3000) |
-| **Backend API** | [http://localhost:8080/api/health](http://localhost:8080/api/health) |
-| **PostgreSQL** | `localhost:5432` |
+## API
 
-</div>
+Les routes `/api/auth/**`, `/api/policy` et `/api/verify/**` sont publiques.
+Les autres routes exigent `Authorization: Bearer <JWT>`. Les originaux et archives
+sont strictement réservés au propriétaire. Les réponses publiques sensibles ne
+sont pas mises en cache.
 
-### 3. Vérifier que tout tourne
+| Route | Fonction |
+| --- | --- |
+| `POST /api/auth/register`, `/login` | Inscription / connexion |
+| `POST /api/auth/resend-verification`, `/forgot-password` | Demande d’email, réponse non révélatrice |
+| `POST /api/auth/verify-email`, `/reset-password` | Consommation d’un jeton à usage unique |
+| `GET /api/account` | Email, vérification, quota |
+| `DELETE /api/account` | Suppression avec confirmation du mot de passe |
+| `GET /api/policy` | Texte, version et durée de conservation |
+| `POST /api/seal` | Sceller, email vérifié requis |
+| `GET /api/seal?q=&folder=&page=0` | Preuves actives du propriétaire |
+| `GET /api/seal/{id}` | Détail propriétaire |
+| `PATCH /api/seal/{id}/labels` | Titre et dossier privés |
+| `GET /api/seal/{id}/original`, `/export` | Original / ZIP |
+| `DELETE /api/seal/{id}` | Retrait immédiat, puis effacement |
+| `POST /api/verify` | Fichier et `recordId` optionnel |
+| `GET /api/verify/{id}`, `/{id}/tsa`, `/{id}/certificate` | Métadonnées / jeton / PDF publics |
+| `GET /actuator/health` | État base, disque des captures, SMTP |
 
-```bash
-# Healthcheck backend
-curl http://localhost:8080/api/health
+Le multipart de scellement exige `file`, `captureId` (UUID stable pour chaque
+capture), `consentAccepted=true`, `geolocConsented`, `policyVersion` et
+`consentedAt` (date déclarée côté client). `mimeType`, `geolocLat`, `geolocLng`
+et `deviceUa` sont facultatifs. La réception du consentement est aussi horodatée
+par le serveur. La version doit correspondre à `/api/policy` ; un nouveau texte
+ne peut pas être accepté silencieusement à la place de l’utilisateur.
 
-# Logs en temps réel
-docker compose logs -f backend
-```
+Verdicts :
 
-<br>
+- `VERIFIE` : fichier identique et jeton TSA validé vers l’autorité configurée.
+- `IDENTIQUE_SANS_HORODATAGE` : fichier identique mais horodatage non vérifié.
+- `ALTERE` : fichier différent de la référence.
+- `INCONNU` : aucune preuve disponible correspondant à la demande.
+- `SUPPRIME` : référence retirée ou expirée, sans métadonnées exposées.
 
-## Architecture
+Le changement de mot de passe invalide tous les JWT précédents. Les tokens email
+sont aléatoires, stockés uniquement sous forme d’empreinte et consommés une seule
+fois. Le reset expire après 30 minutes ; la vérification email après 24 heures.
 
-```
-Realis/
-├── frontend/   Next.js 14 (App Router), TypeScript, Tailwind (PWA)
-├── backend/    Spring Boot 3 (Java 21), API REST
-└── docker-compose.yml
-```
+## Conservation
 
-### Stack technique
+Les preuves expirent 365 jours après le scellement. La suppression retire
+immédiatement les routes publiques et les téléchargements. Un traitement chaque
+minute efface les fichiers, les métadonnées et les consentements associés par
+lots de 100, avec reprise en cas d’échec. Surveiller le retard de purge avant
+qu’il dépasse une heure. Seuls l’UUID et la date de retrait restent comme marqueur
+sans contenu, GPS, nom de fichier ni lien vers le compte.
 
-<div align="center">
+Le brouillon navigateur est supprimé après scellement réussi, sur demande, ou
+lors de la prochaine ouverture après 24 heures. Aucun effacement à distance
+n’est possible si l’appareil reste hors ligne. Éviter les appareils partagés.
 
-| Composant | Technologie | Raison |
-|:---|:---|:---|
-| Frontend | Next.js 14 + Tailwind | PWA, App Router, SSR |
-| Backend | Spring Boot 3, Java 21 | Robustesse, écosystème crypto Java |
-| Base de données | PostgreSQL 16 | ACID, triggers d'immuabilité |
-| Horodatage | RFC 3161 (TSP) via FreeTSA | Juridiquement opposable, standard eIDAS |
-| Hash | SHA-256 (JCA) | Standard, vérifiable par tiers |
-| PDF | iText 8 Community (AGPL) | Génération programmatique, mise en page riche (tables, styles) |
-| Chiffrement at rest | AES-256-GCM (JCA) | Captures chiffrées sur disque |
-| Auth | JWT (JJWT) | Stateless, découplé |
-
-</div>
-
-### Flux de scellement
-
-```
-Caméra → blob vidéo → upload backend
-  → SHA-256 sur octets bruts
-  → RFC 3161 token (FreeTSA)
-  → stockage chiffré AES-256
-  → certificat PDF
-  → retour identifiant + lien de vérification
-```
-
-<br>
-
-## Endpoints principaux
-
-<div align="center">
-
-| Méthode | Route | Auth | Description |
-|:---|:---|:---|:---|
-| `POST` | `/api/auth/register` | Public | Création de compte |
-| `POST` | `/api/auth/login` | Public | Connexion |
-| `POST` | `/api/seal` | JWT | Scelle une capture (multipart) |
-| `GET` | `/api/seal` | JWT | Liste les scellements de l'utilisateur connecté |
-| `GET` | `/api/seal/{id}` | JWT, propriétaire | Détail d'un scellement |
-| `DELETE` | `/api/seal/{id}` | JWT, propriétaire | Suppression logique (invalide la preuve) |
-| `POST` | `/api/verify` | Public | Vérifie un fichier (verdict AUTHENTIQUE / ALTÉRÉ / INCONNU) |
-| `GET` | `/api/verify/{id}` | Public | Métadonnées publiques d'un scellement |
-| `GET` | `/api/verify/{id}/tsa` | Public | Jeton RFC 3161 brut (`.tsr`) |
-| `GET` | `/api/verify/{id}/certificate` | Public | Certificat PDF (lien partageable) |
-| `GET` | `/api/health` | Public | Healthcheck applicatif |
-| `GET` | `/actuator/health` | Public | Healthcheck Spring Boot Actuator (supervision externe) |
-
-</div>
-
-`/api/auth/**` et `/api/verify/**` sont publics par conception : la page de
-vérification et le certificat PDF doivent être consultables sans compte, via un
-simple lien. `/api/seal/**` (hors scellement en lui-même) exige un JWT.
-
-<br>
-
-## Format des erreurs
-
-Toute erreur renvoie un corps JSON homogène :
-
-```json
-{
-  "status": 404,
-  "error": "Not Found",
-  "message": "Enregistrement introuvable : ...",
-  "timestamp": "2026-07-05T10:00:00Z"
-}
-```
-
-<div align="center">
-
-| Code | Cas |
-|:---|:---|
-| `400` | Requête invalide (validation) |
-| `401` | JWT absent, invalide ou expiré |
-| `403` | Accès à une ressource dont on n'est pas propriétaire |
-| `404` | Ressource introuvable |
-| `409` | Conflit (ex. suppression d'un enregistrement déjà supprimé, email déjà utilisé) |
-| `413` | Fichier trop volumineux (> 500 Mo) |
-| `429` | Trop de tentatives (`/api/auth/login`, `/api/auth/register`, `/api/verify`) |
-| `503` | TSA (FreeTSA) temporairement indisponible |
-
-</div>
-
-<br>
-
-## Sécurité
-
-<div align="center">
-
-| Domaine | Mesure |
-|:---|:---|
-| Authentification | JWT stateless HS256 (JJWT), secret ≥ 32 octets exigé au démarrage |
-| Mots de passe | BCrypt, coût 12 |
-| Transport | CSP stricte (`default-src 'self'`), `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` |
-| CORS | Origines dérivées de `FRONTEND_URL`, `localhost:3000` en dev uniquement |
-| Chiffrement at rest | AES-256-GCM par capture, clé injectée via `ENCRYPTION_KEY` (jamais commitée) |
-| Rate-limiting | Fenêtre fixe en mémoire, par IP, sur `/api/auth/**` et `/api/verify` |
-| Immuabilité | Trigger PostgreSQL interdisant toute modification ou suppression physique d'un `sealed_record` (seule `deleted_at` peut être posé) |
-| Horodatage | Chaîne de confiance TSA vérifiée localement (`TSA_CERT_PATH`), Extended Key Usage `timeStamping` et période de validité du certificat contrôlées, pas seulement la signature du jeton |
-
-</div>
-
-<br>
-
-## Développement local (sans Docker)
-
-### Démarrage rapide
-
-```bash
-make dev        # lance postgres + backend (profil local) + frontend
-make dev-reset  # remet la DB à zéro et relance (résout les erreurs de mot de passe)
-make stop       # arrête tout
-```
-
-`make dev` (via `dev.sh`) attend qu'un Postgres réponde sur `localhost:5432`
-(db `realis`, user/mdp `realis_user` / `realis_dev_password` — voir
-`application-local.yml`), puis lance backend et frontend en parallèle dans le
-même terminal (Ctrl+C arrête les deux). Pour contrôler chaque étape
-individuellement, ou pour une configuration différente du profil `local`, voir
-le détail ci-dessous.
-
-### Backend
-
-**Option A — profil `local` (le plus rapide)**
-
-`application-local.yml` embarque déjà des valeurs de développement (secret JWT, clé
-de chiffrement, certificat TSA relatif au dépôt) : aucune variable d'environnement
-à définir.
-
-```bash
-# Démarrer un Postgres local d'abord (db `realis`, user/mdp `realis_user` / `realis_dev_password`
-# — voir application-local.yml), puis :
-cd backend
-mvn spring-boot:run -Dspring-boot.run.profiles=local
-```
-
-**Option B — variables d'environnement explicites**
-
-Pour tester une configuration proche de la production (autres identifiants, autre
-base, etc.) :
-
-```bash
-cd backend
-DB_URL=jdbc:postgresql://localhost:5432/realis \
-DB_USER=realis_user \
-DB_PASSWORD=xxx \
-JWT_SECRET=xxx \
-STORAGE_PATH=/tmp/realis-captures \
-ENCRYPTION_KEY=xxx \
-FRONTEND_URL=http://localhost:3000 \
-mvn spring-boot:run
-```
-
-`TSA_URL` et `TRUST_FORWARDED_FOR` ont des valeurs par défaut raisonnables (voir
-`application.yml`) et peuvent être omis. Attention en revanche à `TSA_CERT_PATH` :
-sa valeur par défaut (`/app/tsa-certs/freetsa-ca.crt`) est un chemin absolu valide
-uniquement dans le conteneur Docker. Hors Docker, pointez-le vers le fichier
-versionné du dépôt, ex. `TSA_CERT_PATH=$(pwd)/src/main/resources/tsa-certs/freetsa-ca.crt`,
-sans quoi la vérification TSA locale se fait sans ancre de confiance (avertissement
-en log, pas d'échec).
-
-`TSA_PROVIDER` vaut `freetsa` par défaut et n'a normalement pas besoin d'être
-défini. Seules les valeurs `freetsa` et `noop` sont acceptées ; toute autre
-valeur (ex. faute de frappe) fait échouer le démarrage plutôt que de basculer
-silencieusement sur le no-op — l'horodatage RFC 3161 étant la valeur centrale
-de Realis, cet échec est volontaire. `noop` doit être choisi explicitement (ex.
-environnement de développement sans accès réseau à une TSA) : ne jamais l'utiliser
-en production.
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-NEXT_PUBLIC_API_URL=http://localhost:8080 npm run dev
-```
-
-<br>
+Une suppression ne peut pas effacer les copies déjà téléchargées par des tiers
+ni annuler un jeton TSA indépendant. Les sauvegardes doivent expirer sous 30 jours.
 
 ## Tests
 
-```bash
-# Backend : suite complète (JUnit + Mockito), inclut le round-trip AES-GCM,
-# la génération PDF et la vérification RFC 3161 avec une TSA auto-signée
-cd backend && mvn test
-
-# Frontend : vérification de types stricte
-cd frontend && npm run type-check
+```sh
+mvn -f backend/pom.xml test
+npm --prefix frontend ci
+npm --prefix frontend run lint
+npm --prefix frontend run type-check
+npm --prefix frontend run build
+cd frontend
+npx playwright install chromium
+npm run test:e2e
 ```
 
-<br>
+Les tests PostgreSQL sont activés par
+`TEST_DB_URL=jdbc:postgresql://localhost:5432/realis_test` avec l’utilisateur et
+le mot de passe `realis_test`. **Cette base doit être isolée** : les tests
+tronquent ses tables entre scénarios et refusent tout autre nom de base.
+La CI fournit ce service et exécute ces tests. Les tests navigateur couvrent
+les formats bureau et mobile, avec interception réseau pour simuler les erreurs.
 
-## Vérification indépendante d'un jeton TSA
+## Export indépendant
 
-Un jeton RFC 3161 stocké en DB peut être vérifié **sans Realis** :
+Télécharger l’archive depuis « Mes preuves », puis extraire et vérifier :
 
-```bash
-# Exporter le token via l'API
-curl -o token.tsr http://localhost:8080/api/verify/{id}/tsa
-
-# Vérifier avec openssl (freetsa-ca.crt est versionné dans le dépôt :
-# backend/src/main/resources/tsa-certs/freetsa-ca.crt)
-openssl ts -verify -in token.tsr -data fichier_original.webm \
-  -CAfile backend/src/main/resources/tsa-certs/freetsa-ca.crt
+```sh
+sha256sum -c sha256.txt
+openssl ts -verify -token_in -in token.tsr -data original.bin -CAfile tsa-ca.crt
 ```
 
-<br>
+`-token_in` est requis : l’export contient un jeton CMS, pas une réponse TSP
+complète. Vérifier indépendamment la provenance du certificat de confiance.
+Le backend accepte les certificats PEM et DER et échoue au démarrage si l’ancre
+configurée est illisible. Il ne se replie jamais sur un signataire non approuvé.
 
-## RGPD
-
-- Consentement granulaire (géoloc opt-in) horodaté avant toute capture. Le texte
-  de consentement précise explicitement que la position GPS, si incluse, sera
-  visible par quiconque dispose du lien du certificat (`/api/verify/**` est
-  public par conception — voir [Endpoints principaux](#endpoints-principaux)) :
-  ce n'est pas une donnée réservée au propriétaire du scellement.
-- Les captures sont chiffrées at rest (AES-256-GCM).
-- Endpoint de suppression logique disponible (avec avertissement : la suppression invalide la preuve).
-- Minimisation des données : seuls les champs nécessaires à la preuve sont collectés.
-- Rate-limiting basique (10 requêtes/minute/IP) sur `/api/auth/login` et
-  `/api/auth/register`, et (30 requêtes/minute/IP) sur `/api/verify`, pour
-  limiter le bruteforce et les abus (en mémoire, mono-instance, à remplacer
-  par un backend partagé type Redis en cas de scale-out).
-- L'IP cliente utilisée pour le rate-limiting et le journal de consentement est
-  celle de la connexion TCP directe par défaut. Derrière un reverse proxy de
-  confiance, activer `TRUST_FORWARDED_FOR=true` (voir `.env.example`) pour lire
-  `X-Forwarded-For`, à n'activer que si ce proxy écrase l'en-tête entrant,
-  sinon un client peut usurper une IP arbitraire.
-
-<br>
-
-<div align="center">
-
-*Realis : MVP en développement*
-
-</div>
+La génération PDF utilise iText Community ; voir sa licence AGPL dans les
+dépendances. Les décisions d’hébergement et de distribution doivent tenir compte
+de cette licence.

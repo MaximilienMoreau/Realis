@@ -11,6 +11,6 @@ public record RegisterRequest(
     // Le maximum évite qu'un payload démesuré soit haché par BCrypt (coût CPU
     // proportionnel à la taille de l'entrée avant troncature interne) : sans borne,
     // un client pourrait soumettre plusieurs Mo de mot de passe en déni de service.
-    @NotBlank @Size(min = 8, max = 128, message = "Le mot de passe doit comporter entre 8 et 128 caractères")
+    @NotBlank @Size(min = 12, max = 72, message = "Le mot de passe doit comporter entre 12 et 72 caractères")
     String password
 ) {}

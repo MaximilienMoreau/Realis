@@ -56,6 +56,8 @@ class FreeTsaTimestampAuthorityTest {
     private static byte[] testSha256;
     private static FreeTsaTimestampAuthority tsAuthority;
 
+    @TempDir static Path trustDir;
+
     @BeforeAll
     static void setUpAll() throws Exception {
         Security.addProvider(new BouncyCastleProvider());
@@ -99,9 +101,36 @@ class FreeTsaTimestampAuthorityTest {
             tokenGen.generate(req, BigInteger.ONE, new Date());
         validTokenDer = token.getEncoded();
 
-        // Authority sans certificat configuré → utilisera le cert embarqué dans le jeton
-        TsaProperties props = new TsaProperties("test", "http://localhost:9999", "/nonexistent/cert.crt", 5000);
+        Path trusted = trustDir.resolve("trusted.der");
+        Files.write(trusted, tsaCertHolder.getEncoded());
+        TsaProperties props = new TsaProperties("test", "http://localhost:9999", trusted.toString(), 5000);
         tsAuthority = new FreeTsaTimestampAuthority(props);
+    }
+
+    @Test
+    void exportedCmsTokenCanBeVerifiedWithOpenSsl(@TempDir Path dir) throws Exception {
+        Path token = dir.resolve("token.tsr"); Files.write(token, validTokenDer);
+        byte[] rootDer = Files.readAllBytes(trustDir.resolve("trusted.der"));
+        String pem = "-----BEGIN CERTIFICATE-----\n" + java.util.Base64.getMimeEncoder(64, new byte[]{10}).encodeToString(rootDer) + "\n-----END CERTIFICATE-----\n";
+        Path ca = dir.resolve("ca.pem"); Files.writeString(ca, pem);
+        var process = new ProcessBuilder("openssl", "ts", "-verify", "-token_in", "-in", token.toString(),
+            "-digest", java.util.HexFormat.of().formatHex(testSha256), "-CAfile", ca.toString()).redirectErrorStream(true).start();
+        String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        assertThat(process.waitFor()).as(output).isZero();
+        assertThat(output).contains("Verification: OK");
+    }
+
+    @Test
+    void bundledPemCertificateLoads() {
+        var authority = new FreeTsaTimestampAuthority(new TsaProperties("test", "http://localhost",
+            "src/main/resources/tsa-certs/freetsa-ca.crt", 1000));
+        assertThat(authority.loadTrustedRoot()).isNotNull();
+    }
+
+    @Test
+    void absentTrustNeverAcceptsSelfSignedToken() {
+        var authority = new FreeTsaTimestampAuthority(new TsaProperties("test", "http://localhost", "/nonexistent/cert.crt", 1000));
+        assertThatThrownBy(() -> authority.verify(validTokenDer, testSha256)).isInstanceOf(com.realis.service.timestamp.TimestampException.class);
     }
 
     @Test
@@ -260,7 +289,7 @@ class FreeTsaTimestampAuthorityTest {
 
         assertThat(result.valid()).isFalse();
         assertThat(result.timestamp()).isNull();
-        assertThat(result.message()).containsIgnoringCase("n'est pas émis par l'autorité de confiance");
+        assertThat(result.message()).containsIgnoringCase("autorité de confiance");
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────

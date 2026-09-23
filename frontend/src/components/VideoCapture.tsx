@@ -38,6 +38,8 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
   const [errorMsg, setErrorMsg] = useState("");
   const [facingBack, setFacingBack] = useState(true);
 
+  const alive = useRef(true);
+  const bytes = useRef(0);
   const videoRef        = useRef<HTMLVideoElement>(null);
   const streamRef       = useRef<MediaStream | null>(null);
   const recorderRef     = useRef<MediaRecorder | null>(null);
@@ -46,7 +48,10 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
   const toggleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    alive.current = true;
     return () => {
+      alive.current = false;
+      if (recorderRef.current) recorderRef.current.onstop = null;
       stopStream();
       if (timerRef.current) clearInterval(timerRef.current);
       // Sans ça, un activateCamera() en attente (déclenché par toggleCamera) s'exécuterait
@@ -68,6 +73,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
         video: { facingMode: useBack ? "environment" : "user" },
         audio: false,
       });
+      if (!alive.current) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -98,15 +104,18 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
     }
 
     chunksRef.current = [];
+    bytes.current = 0;
 
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data.size > 0) { chunksRef.current.push(e.data); bytes.current += e.data.size; }
+      if (bytes.current >= 450 * 1048576 && recorder.state === "recording") recorder.stop();
     };
 
     recorder.onstop = async () => {
       stopStream();
       if (timerRef.current) clearInterval(timerRef.current);
 
+      if (!alive.current) return;
       const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
       const metadata: CaptureMetadata = {
         capturedAt: new Date().toISOString(),
@@ -126,6 +135,10 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
         }
       }
 
+      if (!alive.current) return;
+      if (blob.size > 500 * 1048576) {
+        setErrorMsg("Capture trop volumineuse. Enregistrez une vidéo plus courte."); setState("error"); return;
+      }
       setState("recorded");
       onCaptured(blob, metadata);
     };
@@ -168,7 +181,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
       <div className="text-center space-y-1">
         <h2 className="text-lg font-semibold text-realis-700 dark:text-realis-300">Capturer l&apos;état des lieux</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          La vidéo sera scellée dès l&apos;arrêt de l&apos;enregistrement.
+          Vous pourrez revoir et sauvegarder la vidéo avant de la sceller. Un brouillon local est conservé sur cet appareil pour reprendre l’envoi.
         </p>
       </div>
 

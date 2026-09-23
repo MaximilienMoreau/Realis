@@ -29,17 +29,7 @@ public class VerificationService {
     private final SealedRecordRepository  sealedRecordRepository;
     private final TimestampAuthority      timestampAuthority;
 
-    /**
-     * Vérifie l'intégrité et l'horodatage d'un fichier.
-     *
-     * Deux modes :
-     *  - Avec recordId : compare le hash du fichier uploadé contre l'enregistrement spécifié
-     *                    → AUTHENTIQUE ou ALTÉRÉ (verdict définitif)
-     *  - Sans recordId : recherche par hash dans tous les enregistrements
-     *                    → AUTHENTIQUE (trouvé) ou INCONNU (non trouvé)
-     *
-     * Le hash est calculé sur les octets bruts du fichier uploadé, sans ré-encodage.
-     */
+
     public VerificationResponse verify(MultipartFile file, UUID recordId) throws IOException {
         String uploadedHash;
         try (InputStream in = file.getInputStream()) {
@@ -54,23 +44,11 @@ public class VerificationService {
         }
     }
 
-    /**
-     * Mode 1 : Vérification contre un enregistrement précis (identifié par son UUID).
-     * Permet d'obtenir un verdict ALTÉRÉ définitif si le hash diffère.
-     *
-     * Si le recordId ne correspond à aucun enregistrement, on retombe sur le même
-     * contrat que le mode 2 (verdict INCONNU) plutôt que de laisser fuiter une
-     * ResourceNotFoundException : le client reçoit toujours un VerificationResponse.
-     *
-     * Contrairement au mode 2, la recherche se fait par findById (pas findActiveBy...) :
-     * un enregistrement supprimé logiquement par son propriétaire peut donc toujours
-     * renvoyer AUTHENTIQUE si le hash correspond (le hash cryptographique reste valide
-     * après suppression). C'est signalé via record.deleted/record.warning dans la
-     * réponse — voir la Javadoc de VerificationResponse.
-     */
+
     private VerificationResponse verifyAgainstRecord(String uploadedHash, UUID recordId) {
         Optional<SealedRecord> found = sealedRecordRepository.findById(recordId);
         if (found.isEmpty()) {
+            if (sealedRecordRepository.wasDeleted(recordId)) return deleted(uploadedHash);
             return new VerificationResponse(
                 Verdict.INCONNU,
                 uploadedHash,
@@ -82,31 +60,28 @@ public class VerificationService {
         }
         SealedRecord record = found.get();
 
+        if (!record.isAvailable()) return deleted(uploadedHash);
+
         boolean hashMatches = uploadedHash.equalsIgnoreCase(record.getSha256Hex());
-        Verdict verdict = hashMatches ? Verdict.AUTHENTIQUE : Verdict.ALTERE;
+        Verdict verdict = hashMatches ? Verdict.IDENTIQUE_SANS_HORODATAGE : Verdict.ALTERE;
 
         IntegrityCheckResult integrity = hashMatches
             ? new IntegrityCheckResult(true,
                 "Le hash SHA-256 du fichier correspond exactement à l'enregistrement scellé.")
             : new IntegrityCheckResult(false,
                 "Le hash SHA-256 ne correspond PAS à l'enregistrement scellé. " +
-                "Le fichier a été modifié depuis le scellement.");
+                "Le fichier soumis diffère du fichier de référence.");
 
         // La vérification TSA porte toujours sur le hash scellé (pas le hash uploadé altéré)
         TsaCheckResult tsaCheck = buildTsaCheck(record);
 
+        if (hashMatches && tsaCheck.valid()) verdict = Verdict.VERIFIE;
         return new VerificationResponse(verdict, uploadedHash, SealResponse.from(record), integrity, tsaCheck);
     }
 
-    /**
-     * Mode 2 : Recherche par hash (pas de référence fournie).
-     * Retourne AUTHENTIQUE si un enregistrement actif correspond, INCONNU sinon.
-     *
-     * Le hash n'étant pas unique en base (deux scellements peuvent porter sur un contenu
-     * identique), on retient le plus récent des enregistrements actifs correspondants.
-     */
+
     private VerificationResponse verifyByHash(String uploadedHash) {
-        List<SealedRecord> found = sealedRecordRepository.findActiveBySha256Hex(uploadedHash);
+        List<SealedRecord> found = sealedRecordRepository.findActiveBySha256Hex(uploadedHash).stream().filter(SealedRecord::isAvailable).toList();
 
         if (found.isEmpty()) {
             return new VerificationResponse(
@@ -124,7 +99,7 @@ public class VerificationService {
         TsaCheckResult tsaCheck = buildTsaCheck(record);
 
         return new VerificationResponse(
-            Verdict.AUTHENTIQUE,
+            tsaCheck.valid() ? Verdict.VERIFIE : Verdict.IDENTIQUE_SANS_HORODATAGE,
             uploadedHash,
             SealResponse.from(record),
             new IntegrityCheckResult(true,
@@ -134,10 +109,7 @@ public class VerificationService {
         );
     }
 
-    /**
-     * Vérifie le jeton TSA de l'enregistrement.
-     * Si le jeton est vide (no-op), retourne un avertissement sans invalider le verdict.
-     */
+
     private TsaCheckResult buildTsaCheck(SealedRecord record) {
         boolean isNoOp = record.getTsaUrl().startsWith("no-op://");
 
@@ -160,27 +132,30 @@ public class VerificationService {
         }
     }
 
-    /**
-     * Retourne le jeton TSA brut (DER) d'un enregistrement.
-     * Permet une vérification indépendante sans accès à la base Realis.
-     *
-     * Exemple openssl :
-     *   openssl ts -verify -in token.tsr -data fichier.webm -CAfile freetsa-ca.crt
-     */
+
     public byte[] getTsaToken(UUID recordId) {
         SealedRecord record = sealedRecordRepository.findById(recordId)
             .orElseThrow(() -> new ResourceNotFoundException(
                 "Enregistrement introuvable : " + recordId
             ));
+        requireAvailable(record);
         return record.getTsaTokenDer();
     }
 
-    /** Retourne les métadonnées publiques d'un enregistrement (sans les données de l'utilisateur). */
+
     public SealResponse getPublicMetadata(UUID recordId) {
         SealedRecord record = sealedRecordRepository.findById(recordId)
             .orElseThrow(() -> new ResourceNotFoundException(
                 "Enregistrement introuvable : " + recordId
             ));
+        requireAvailable(record);
         return SealResponse.from(record);
+    }
+    public static void requireAvailable(SealedRecord record) {
+        if (!record.isAvailable()) throw new ResourceNotFoundException("Preuve supprimée ou expirée");
+    }
+    private VerificationResponse deleted(String hash) {
+        return new VerificationResponse(Verdict.SUPPRIME, hash, null,
+            new IntegrityCheckResult(false, "Enregistrement supprimé ou expiré. Données indisponibles."), null);
     }
 }

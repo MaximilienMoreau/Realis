@@ -22,7 +22,7 @@ class PdfCertificateServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new PdfCertificateService(new AppProperties("https://realis.app"));
+        service = new PdfCertificateService(new AppProperties("https://realis.app"), new com.realis.service.timestamp.NoOpTimestampAuthority(), new HashService());
 
         User user = User.builder()
             .id(UUID.randomUUID())

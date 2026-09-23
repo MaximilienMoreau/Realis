@@ -38,7 +38,7 @@ public record SealResponse(
             deleted,
             deleted
                 ? "AVERTISSEMENT : cet enregistrement a été supprimé le " + r.getDeletedAt()
-                  + ". La preuve d'intégrité ne peut plus être garantie."
+                  + ". Accès retiré ; effacement des données actives en cours. Les copies déjà exportées restent indépendantes de Realis."
                 : null
         );
     }

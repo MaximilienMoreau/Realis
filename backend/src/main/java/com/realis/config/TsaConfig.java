@@ -19,10 +19,16 @@ public class TsaConfig {
      * basculer discrètement sur le no-op.
      */
     @Bean
-    public TimestampAuthority timestampAuthority(TsaProperties props) {
+    public TimestampAuthority timestampAuthority(TsaProperties props, org.springframework.core.env.Environment environment) {
         return switch (props.provider()) {
-            case "freetsa" -> new FreeTsaTimestampAuthority(props);
+            case "freetsa" -> {
+                var authority = new FreeTsaTimestampAuthority(props);
+                authority.loadTrustedRoot();
+                yield authority;
+            }
             case "noop" -> {
+                if (!environment.acceptsProfiles(org.springframework.core.env.Profiles.of("local", "test")))
+                    throw new IllegalStateException("TSA noop réservée aux profils local et test");
                 log.warn("realis.tsa.provider='noop' : l'horodatage RFC 3161 est DÉSACTIVÉ. " +
                     "Ne jamais laisser ce réglage en production.");
                 yield new NoOpTimestampAuthority();

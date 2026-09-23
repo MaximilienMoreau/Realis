@@ -7,8 +7,21 @@ on:
 
 jobs:
   backend:
-    name: Backend (Maven)
+    name: Backend (Maven + PostgreSQL)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: realis_test
+          POSTGRES_USER: realis_test
+          POSTGRES_PASSWORD: realis_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U realis_test -d realis_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DB_URL: jdbc:postgresql://localhost:5432/realis_test
     defaults:
       run:
         working-directory: backend
@@ -25,6 +38,11 @@ jobs:
       - name: Tests
         run: mvn -B verify
 
+      - name: Backup archive tests
+        working-directory: .
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
+
   frontend:
     name: Frontend (Next.js)
     runs-on: ubuntu-latest
@@ -34,10 +52,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Node 20
+      - name: Node 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -54,3 +72,19 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8080
         run: npm run build
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        run: npm run test:e2e
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-traces
+          path: frontend/test-results

@@ -83,6 +83,28 @@ class VerificationServiceTest {
             .build();
     }
 
+    @Test
+    void invalidTimestampCannotProduceVerifiedVerdict() throws IOException {
+        var authority = mock(TimestampAuthority.class);
+        var record = SealedRecord.builder().id(recordId).sha256Hex(hashService.sha256Hex(ORIGINAL_BYTES))
+            .tsaTokenDer(new byte[]{1}).tsaUrl("https://tsa.test").build();
+        when(repo.findById(recordId)).thenReturn(Optional.of(record));
+        when(authority.verify(any(), any())).thenReturn(new com.realis.service.timestamp.TsaVerificationResult(false, null, "invalid"));
+        var result = new VerificationService(hashService, repo, authority).verify(new MockMultipartFile("file", ORIGINAL_BYTES), recordId);
+        assertThat(result.verdict()).isEqualTo(Verdict.IDENTIQUE_SANS_HORODATAGE);
+        assertThat(result.tsaCheck().valid()).isFalse();
+    }
+    @Test
+    void trustedTimestampAndMatchingFileProduceVerifiedVerdict() throws IOException {
+        var authority = mock(TimestampAuthority.class);
+        var record = SealedRecord.builder().id(recordId).sha256Hex(hashService.sha256Hex(ORIGINAL_BYTES))
+            .tsaTokenDer(new byte[]{1}).tsaUrl("https://tsa.test").build();
+        when(repo.findById(recordId)).thenReturn(Optional.of(record));
+        when(authority.verify(any(), any())).thenReturn(new com.realis.service.timestamp.TsaVerificationResult(true, Instant.now(), "valid"));
+        var result = new VerificationService(hashService, repo, authority).verify(new MockMultipartFile("file", ORIGINAL_BYTES), recordId);
+        assertThat(result.verdict()).isEqualTo(Verdict.VERIFIE);
+    }
+
     // ── Cas 1 : AUTHENTIQUE, même fichier, recherche par hash ───────────────
 
     @Test
@@ -95,7 +117,7 @@ class VerificationServiceTest {
 
         VerificationResponse result = service.verify(file, null);
 
-        assertThat(result.verdict()).isEqualTo(Verdict.AUTHENTIQUE);
+        assertThat(result.verdict()).isEqualTo(Verdict.IDENTIQUE_SANS_HORODATAGE);
         assertThat(result.uploadedSha256()).isEqualTo(sealedRecord.getSha256Hex());
         assertThat(result.integrityCheck().passed()).isTrue();
         assertThat(result.record()).isNotNull();
@@ -113,7 +135,7 @@ class VerificationServiceTest {
 
         VerificationResponse result = service.verify(file, recordId);
 
-        assertThat(result.verdict()).isEqualTo(Verdict.AUTHENTIQUE);
+        assertThat(result.verdict()).isEqualTo(Verdict.IDENTIQUE_SANS_HORODATAGE);
         assertThat(result.integrityCheck().passed()).isTrue();
     }
 
@@ -227,11 +249,10 @@ class VerificationServiceTest {
 
         VerificationResponse result = service.verify(file, recordId);
 
-        assertThat(result.verdict()).isEqualTo(Verdict.AUTHENTIQUE);
-        assertThat(result.integrityCheck().passed()).isTrue();
-        assertThat(result.record()).isNotNull();
-        assertThat(result.record().deleted()).isTrue();
-        assertThat(result.record().warning()).isNotNull();
+        assertThat(result.verdict()).isEqualTo(Verdict.SUPPRIME);
+        assertThat(result.integrityCheck().passed()).isFalse();
+        assertThat(result.record()).isNull();
+        assertThat(result.tsaCheck()).isNull();
     }
 
     // ── Cas 9 : deux enregistrements actifs partagent le même hash ──────────
@@ -262,7 +283,7 @@ class VerificationServiceTest {
 
         VerificationResponse result = service.verify(file, null);
 
-        assertThat(result.verdict()).isEqualTo(Verdict.AUTHENTIQUE);
+        assertThat(result.verdict()).isEqualTo(Verdict.IDENTIQUE_SANS_HORODATAGE);
         assertThat(result.record()).isNotNull();
         assertThat(result.record().id()).isEqualTo(sealedRecord.getId());
     }

@@ -1,34 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export interface ConsentData {
   geolocConsented: boolean;
   purposeText: string;
+  policyVersion: string;
   retentionDays: number;
   consentedAt: string; // ISO
 }
-
-const PURPOSE_TEXT =
-  "Enregistrement d'un état des lieux immobilier à des fins de preuve " +
-  "d'intégrité et d'antériorité. Les données sont conservées 365 jours " +
-  "et peuvent être supprimées sur demande (la suppression invalide la preuve).";
 
 interface Props {
   onConsent: (data: ConsentData) => void;
 }
 
 export default function ConsentForm({ onConsent }: Props) {
+  const [policy, setPolicy] = useState<{version: string; text: string; retentionDays: number} | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { import("@/lib/api").then(({api}) => api<{version: string; text: string; retentionDays: number}>("/api/policy"))
+    .then(setPolicy).catch(() => setError("Impossible de charger les conditions. Rechargez la page.")); }, []);
   const [geolocConsented, setGeolocConsented] = useState(false);
   const [purposeRead, setPurposeRead]         = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!purposeRead) return;
+    if (!purposeRead || !policy) return;
     onConsent({
       geolocConsented,
-      purposeText: PURPOSE_TEXT,
-      retentionDays: 365,
+      purposeText: policy.text,
+      policyVersion: policy.version,
+      retentionDays: policy.retentionDays,
       consentedAt: new Date().toISOString(),
     });
   };
@@ -46,7 +47,7 @@ export default function ConsentForm({ onConsent }: Props) {
 
       <div className="bg-realis-50 dark:bg-realis-900/30 border border-realis-100 dark:border-realis-800 rounded-xl p-4 text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
         <p className="font-medium text-realis-700 dark:text-realis-300 mb-1">Finalité de la collecte</p>
-        <p>{PURPOSE_TEXT}</p>
+        <p>{policy?.text ?? (error || "Chargement des conditions…")}</p>
       </div>
 
       <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
@@ -99,7 +100,7 @@ export default function ConsentForm({ onConsent }: Props) {
 
       <button
         type="submit"
-        disabled={!purposeRead}
+        disabled={!purposeRead || !policy}
         className="w-full py-3 bg-realis-600 hover:bg-realis-700 disabled:opacity-40
                    text-white font-medium rounded-xl transition-colors"
       >

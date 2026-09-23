@@ -33,6 +33,7 @@ public class AuthController {
     private final JwtService jwtService;
     private final RateLimiter rateLimiter;
     private final ClientIpResolver clientIpResolver;
+    private final com.realis.service.AccountService accounts;
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(
@@ -40,6 +41,8 @@ public class AuthController {
         HttpServletRequest httpRequest
     ) {
         checkRateLimit("register", httpRequest);
+        if (request.password().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72)
+            throw new IllegalArgumentException("Mot de passe limité à 72 octets UTF-8");
         String email = normalizeEmail(request.email());
         if (userRepository.existsByEmail(email)) {
             // ConflictException (409), pas IllegalArgumentException (400) : c'est le même
@@ -53,7 +56,8 @@ public class AuthController {
             .passwordHash(passwordEncoder.encode(request.password()))
             .build();
         user = userRepository.save(user);
-        String token = jwtService.generateToken(user.getId(), user.getEmail());
+        accounts.request(user.getEmail(), "VERIFY");
+        String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getTokenVersion());
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(new AuthResponse(token, user.getId(), user.getEmail()));
     }
@@ -66,10 +70,11 @@ public class AuthController {
         checkRateLimit("login", httpRequest);
         User user = userRepository.findByEmail(normalizeEmail(request.email()))
             .orElseThrow(() -> new BadCredentialsException("Identifiants invalides"));
+        if (user.getDeletedAt() != null) throw new BadCredentialsException("Compte supprimé");
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new BadCredentialsException("Identifiants invalides");
         }
-        String token = jwtService.generateToken(user.getId(), user.getEmail());
+        String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getTokenVersion());
         return ResponseEntity.ok(new AuthResponse(token, user.getId(), user.getEmail()));
     }
 

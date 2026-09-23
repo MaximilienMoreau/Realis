@@ -108,31 +108,45 @@ public class StorageService {
      * besoins futurs (récupération, contrôle d'intégrité du volume de stockage lui-même).
      */
     public byte[] decryptToBytes(String storagePath) throws IOException {
-        byte[] raw = Files.readAllBytes(Path.of(storagePath));
+        Path temp = decryptToTempFile(storagePath);
+        try { return Files.readAllBytes(temp); }
+        finally { Files.deleteIfExists(temp); }
+    }
 
-        byte[] iv         = new byte[GCM_IV_LENGTH];
-        byte[] ciphertext = new byte[raw.length - GCM_IV_LENGTH];
-        System.arraycopy(raw, 0, iv, 0, GCM_IV_LENGTH);
-        System.arraycopy(raw, GCM_IV_LENGTH, ciphertext, 0, ciphertext.length);
-
-        Cipher cipher = initCipher(Cipher.DECRYPT_MODE, iv);
-        try {
-            return cipher.doFinal(ciphertext);
-        } catch (IllegalBlockSizeException | BadPaddingException e) {
-            throw new IOException("Échec du déchiffrement : fichier corrompu ou clé incorrecte", e);
+    /** Authenticate completely before any plaintext is returned to the client. */
+    public Path decryptToTempFile(String storagePath) throws IOException {
+        Path temp = Files.createTempFile("realis-download-", ".tmp");
+        try (InputStream in = Files.newInputStream(checkedPath(storagePath));
+             OutputStream out = Files.newOutputStream(temp)) {
+            byte[] iv = in.readNBytes(GCM_IV_LENGTH);
+            if (iv.length != GCM_IV_LENGTH) throw new IOException("Capture tronquée");
+            // BC supports incremental GCM decryption without buffering the entire file in heap.
+            Cipher cipher = Cipher.getInstance(ALGORITHM, new org.bouncycastle.jce.provider.BouncyCastleProvider());
+            cipher.init(Cipher.DECRYPT_MODE, aesKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int count;
+            while ((count = in.read(buffer)) != -1) {
+                byte[] plain = cipher.update(buffer, 0, count);
+                if (plain != null) out.write(plain);
+            }
+            out.write(cipher.doFinal());
+            return temp;
+        } catch (Exception e) {
+            Files.deleteIfExists(temp);
+            throw new IOException("Capture corrompue, indisponible ou clé incorrecte", e);
         }
     }
 
-    /**
-     * Déchiffre vers un fichier temporaire (pour un futur re-calcul de hash en streaming,
-     * non utilisé par le flux de vérification actuel, voir decryptToBytes).
-     * L'appelant est responsable de supprimer le fichier temporaire.
-     */
-    public Path decryptToTempFile(String storagePath) throws IOException {
-        Path temp = Files.createTempFile("realis-verify-", ".tmp");
-        byte[] plain = decryptToBytes(storagePath);
-        Files.write(temp, plain);
-        return temp;
+    public void delete(String storagePath) throws IOException {
+        Files.deleteIfExists(checkedPath(storagePath));
+    }
+    private Path checkedPath(String value) throws IOException {
+        Path root = rootPath.toAbsolutePath().normalize();
+        Path path = Path.of(value).toAbsolutePath().normalize();
+        if (!path.startsWith(root) || path.equals(root)) throw new IOException("Chemin de stockage invalide");
+        if (Files.exists(path) && !path.toRealPath().startsWith(root.toRealPath()))
+            throw new IOException("Lien de stockage invalide");
+        return path;
     }
 
     private byte[] generateIv() {

@@ -21,6 +21,7 @@ import java.util.UUID;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final com.realis.repository.UserRepository users;
 
     @Override
     protected void doFilterInternal(HttpServletRequest req,
@@ -31,6 +32,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String token = header.substring(7);
             if (jwtService.isValid(token)) {
                 UUID userId = jwtService.extractUserId(token);
+                var user = users.findById(userId).orElse(null);
+                if (user == null || user.getDeletedAt() != null || user.getTokenVersion() != jwtService.extractVersion(token)) {
+                    chain.doFilter(req, res);
+                    return;
+                }
                 var auth = new UsernamePasswordAuthenticationToken(userId, null, List.of());
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(req));
                 SecurityContextHolder.getContext().setAuthentication(auth);
