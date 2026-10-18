@@ -108,3 +108,78 @@ test("une capture réelle MediaRecorder passe par la prévisualisation", async (
   await page.getByRole("button",{name:"Sceller cette capture"}).click();
   await expect(page.getByText("Télécharger le certificat PDF",{exact:false})).toBeVisible();
 });
+
+test("un autre compte ne peut pas ouvrir ni effacer le brouillon existant", async ({page}) => {
+  await seedDraft(page);
+  await page.evaluate(async () => {
+    await new Promise<void>(resolve => {
+      const req = indexedDB.open("realis-captures", 1);
+      req.onsuccess = () => {
+        const db = req.result; const tx = db.transaction("drafts", "readwrite");
+        const store = tx.objectStore("drafts");
+        const get = store.get("11111111-1111-4111-8111-111111111111");
+        get.onsuccess = () => {
+          store.put({...get.result, owner:"other-account"}, "pending");
+          store.delete("11111111-1111-4111-8111-111111111111");
+        };
+        tx.oncomplete = () => { db.close(); resolve(); };
+      };
+    });
+  });
+  await page.reload();
+  await page.getByRole("button", {name:"Continuer", exact:true}).click();
+  await expect(page.getByText("Avant de commencer", {exact:true})).toBeVisible();
+  await expect(page.getByRole("button", {name:"Télécharger la vidéo avant envoi"})).toHaveCount(0);
+  await expect(page.getByRole("button", {name:"Effacer le brouillon"})).toHaveCount(0);
+  const retained = await page.evaluate(() => new Promise<string>(resolve => {
+    const req = indexedDB.open("realis-captures", 1);
+    req.onsuccess = () => {
+      const db = req.result; const get = db.transaction("drafts").objectStore("drafts").get("pending");
+      get.onsuccess = () => { db.close(); resolve(get.result.owner); };
+    };
+  }));
+  expect(retained).toBe("other-account");
+});
+
+test("une nouvelle politique peut être acceptée sans perdre la capture", async ({page}) => {
+  await seedDraft(page);
+  await page.route("**/api/policy", route => route.fulfill({json:{version:"new-policy",text:"Nouvelles conditions",retentionDays:365}}));
+  let body = "";
+  await page.route("**/api/seal", route => {
+    body = route.request().postData() ?? "";
+    return route.fulfill({status:201,json:result});
+  });
+  await page.getByRole("button", {name:"Sceller cette capture"}).click();
+  await expect(page.getByText("Nouvelles conditions", {exact:true})).toBeVisible();
+  expect(body).toBe("");
+  await page.locator('input[type="checkbox"][required]').check();
+  await page.getByRole("button", {name:"Accepter pour cette capture"}).click();
+  await page.reload();
+  await page.getByRole("button", {name:"Continuer", exact:true}).click();
+  await page.getByRole("button", {name:"Sceller cette capture"}).click();
+  await expect(page.getByText("Télécharger le certificat PDF", {exact:false})).toBeVisible();
+  expect(body).toContain("new-policy"); expect(body).toContain(id); expect(body).toContain("video");
+});
+
+test("un changement de caméra ne laisse aucun flux ouvert après navigation", async ({page}) => {
+  await page.addInitScript(() => {
+    const streams: MediaStream[] = [];
+    (window as any).cameraStreams = streams;
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {value: async () => {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const canvas = document.createElement("canvas");
+      const stream = canvas.captureStream(1); streams.push(stream); return stream;
+    }});
+  });
+  await page.goto("/nouveau");
+  await page.getByRole("button", {name:"Continuer", exact:true}).click();
+  await page.locator('input[type="checkbox"][required]').check();
+  await page.getByRole("button", {name:"Accepter et commencer la capture"}).click();
+  await page.getByRole("button", {name:"Activer la caméra"}).click();
+  await page.getByRole("button", {name:"Retourner la caméra"}).click();
+  await expect(page.getByRole("button", {name:"Activer la caméra"})).toHaveCount(0);
+  await page.getByRole("link", {name:"← Realis"}).click();
+  await expect(page).toHaveURL("/");
+  await expect.poll(() => page.evaluate(() => (window as any).cameraStreams.length)).toBe(2);
+  await expect.poll(() => page.evaluate(() => (window as any).cameraStreams.every((s: MediaStream) => s.getTracks().every(t => t.readyState === "ended")))).toBeTruthy();
+});

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, loginUser } from "@/lib/api";
-import { clearAuth, getToken, saveAuth } from "@/lib/auth";
+import { clearAuth, getStoredUser, getToken, saveAuth } from "@/lib/auth";
 import { clearDraft } from "@/lib/draft";
 interface Account { email: string; emailVerified: boolean; storageUsed: number; storageQuota: number }
 export default function AccountPage() {
@@ -54,8 +54,9 @@ export default function AccountPage() {
       <details className="border-t pt-4"><summary className="text-red-700 cursor-pointer">Supprimer mon compte</summary>
         <p className="text-sm my-3">Vos liens deviennent indisponibles immédiatement. Les captures et données actives sont effacées sous une heure ; les sauvegardes expirent sous 30 jours. Téléchargez vos preuves avant de continuer.</p>
         <form onSubmit={e => { e.preventDefault(); if (!confirm("Supprimer définitivement votre compte et toutes ses preuves ?")) return; run(async () => {
+          const owner = getStoredUser()?.userId;
           await api("/api/account", "DELETE", {password}); clearAuth(); setAccount(null); setPassword("");
-          await clearDraft().catch(() => {}); setMessage("Compte désactivé. Effacement des données en cours.");
+          if (owner) await clearDraft(owner).catch(() => {}); setMessage("Compte désactivé. Effacement des données en cours.");
         }); }}><label>Confirmer votre mot de passe<input className="field" type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label>
         <button className="action bg-red-700" disabled={busy}>Supprimer définitivement</button></form>
       </details>

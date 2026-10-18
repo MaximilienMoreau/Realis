@@ -40,24 +40,24 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
 
   const alive = useRef(true);
   const bytes = useRef(0);
+  const opening = useRef(false);
+  const cameraRequest = useRef(0);
   const videoRef        = useRef<HTMLVideoElement>(null);
   const streamRef       = useRef<MediaStream | null>(null);
   const recorderRef     = useRef<MediaRecorder | null>(null);
   const chunksRef       = useRef<BlobPart[]>([]);
   const timerRef        = useRef<ReturnType<typeof setInterval> | null>(null);
-  const toggleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     alive.current = true;
+    const requests = cameraRequest;
     return () => {
       alive.current = false;
+      requests.current++;
+      opening.current = false;
       if (recorderRef.current) recorderRef.current.onstop = null;
       stopStream();
       if (timerRef.current) clearInterval(timerRef.current);
-      // Sans ça, un activateCamera() en attente (déclenché par toggleCamera) s'exécuterait
-      // après le démontage : la caméra se rallumerait sans qu'aucun flux ne soit jamais
-      // arrêté (le voyant caméra resterait allumé après avoir quitté la page).
-      if (toggleTimeoutRef.current) clearTimeout(toggleTimeoutRef.current);
     };
   }, []);
 
@@ -67,13 +67,18 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
   };
 
   const activateCamera = async (useBack: boolean = facingBack) => {
+    if (opening.current || !alive.current) return;
+    opening.current = true;
+    const request = ++cameraRequest.current;
     setState("requesting");
+    stopStream();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: useBack ? "environment" : "user" },
         audio: false,
       });
-      if (!alive.current) { stream.getTracks().forEach(t => t.stop()); return; }
+      if (!alive.current || request !== cameraRequest.current) { stream.getTracks().forEach(t => t.stop()); return; }
+      stopStream();
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -81,12 +86,15 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
       }
       setState("preview");
     } catch (err) {
+      if (!alive.current || request !== cameraRequest.current) return;
       setErrorMsg(
         err instanceof DOMException && err.name === "NotAllowedError"
           ? "Accès à la caméra refusé. Vérifiez les permissions du navigateur."
           : "Impossible d'accéder à la caméra."
       );
       setState("error");
+    } finally {
+      if (request === cameraRequest.current) opening.current = false;
     }
   };
 
@@ -157,7 +165,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
   };
 
   const stopRecording = () => {
-    recorderRef.current?.stop();
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
   };
 
   const retake = () => {
@@ -166,14 +174,11 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
     chunksRef.current = [];
   };
 
-  const toggleCamera = async () => {
+  const toggleCamera = () => {
+    if (opening.current || state !== "preview") return;
     const next = !facingBack;
     setFacingBack(next);
-    stopStream();
-    setState("idle");
-    // On passe `next` explicitement : `activateCamera` par défaut lirait `facingBack`
-    // depuis la closure de ce rendu, donc encore l'ancienne valeur au moment du timeout.
-    toggleTimeoutRef.current = setTimeout(() => activateCamera(next), 200);
+    void activateCamera(next);
   };
 
   return (
@@ -211,6 +216,7 @@ export default function VideoCapture({ geolocConsented, onCaptured }: Props) {
             className="absolute top-3 right-3 bg-black/60 text-white rounded-full p-2
                        disabled:opacity-40 hover:bg-black/80 transition-colors"
             title="Retourner la caméra"
+            aria-label="Retourner la caméra"
           >
             ↺
           </button>
