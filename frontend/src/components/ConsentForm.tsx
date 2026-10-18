@@ -12,14 +12,16 @@ export interface ConsentData {
 
 interface Props {
   onConsent: (data: ConsentData) => void;
+  renewing?: boolean;
+  initialGeolocConsented?: boolean;
 }
 
-export default function ConsentForm({ onConsent }: Props) {
+export default function ConsentForm({ onConsent, renewing = false, initialGeolocConsented = false }: Props) {
   const [policy, setPolicy] = useState<{version: string; text: string; retentionDays: number} | null>(null);
   const [error, setError] = useState("");
   useEffect(() => { import("@/lib/api").then(({api}) => api<{version: string; text: string; retentionDays: number}>("/api/policy"))
     .then(setPolicy).catch(() => setError("Impossible de charger les conditions. Rechargez la page.")); }, []);
-  const [geolocConsented, setGeolocConsented] = useState(false);
+  const [geolocConsented, setGeolocConsented] = useState(initialGeolocConsented);
   const [purposeRead, setPurposeRead]         = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -38,7 +40,7 @@ export default function ConsentForm({ onConsent }: Props) {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div>
         <h2 className="text-lg font-semibold text-realis-700 dark:text-realis-300 mb-1">
-          Avant de commencer
+          {renewing ? "Actualiser le consentement" : "Avant de commencer"}
         </h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Realis collecte les données suivantes pour constituer votre preuve.
@@ -104,7 +106,7 @@ export default function ConsentForm({ onConsent }: Props) {
         className="w-full py-3 bg-realis-600 hover:bg-realis-700 disabled:opacity-40
                    text-white font-medium rounded-xl transition-colors"
       >
-        Accepter et commencer la capture
+        {renewing ? "Accepter pour cette capture" : "Accepter et commencer la capture"}
       </button>
     </form>
   );

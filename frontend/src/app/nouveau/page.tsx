@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import ConsentForm, { type ConsentData } from "@/components/ConsentForm";
 import VideoCapture, { type CaptureMetadata } from "@/components/VideoCapture";
-import { registerUser, loginUser, sealCapture, certificateUrl, AuthExpiredError, type SealResponse } from "@/lib/api";
+import { api, registerUser, loginUser, sealCapture, certificateUrl, AuthExpiredError, type SealResponse } from "@/lib/api";
 import { saveAuth, getStoredUser, clearAuth, isAuthenticated } from "@/lib/auth";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -23,20 +23,46 @@ export default function NouveauPage() {
 
   const [draft, setDraft] = useState<CaptureDraft | null>(null);
   const [progress, setProgress] = useState(0);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(true);
   const [preview, setPreview] = useState<string | null>(null);
   useEffect(() => {
-    loadDraft().then(d => { if (d) { setDraft(d); setConsent(d.consent); } })
-      .catch(() => setSealError("La sauvegarde locale est indisponible. Gardez cette page ouverte et téléchargez la capture avant de l’envoyer."))
-      .finally(() => setReady(true));
+    const changed = (event: StorageEvent) => {
+      if (event.key === null || event.key === "realis_user_id" || event.key === "realis_token") window.location.reload();
+    };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
   }, []);
   useEffect(() => {
     if (!draft) { setPreview(null); return; }
     const url = URL.createObjectURL(draft.blob); setPreview(url);
     return () => URL.revokeObjectURL(url);
   }, [draft]);
-  const handleAuth = () => { setSealError(null); setStep(draft ? "review" : "consent"); };
-  const handleConsent = (data: ConsentData) => { setConsent(data); setStep("capture"); };
+  const handleAuth = async () => {
+    const owner = getStoredUser()?.userId;
+    if (!owner || !isAuthenticated()) return;
+    const retained = draft?.owner === owner ? draft : null;
+    setReady(false); setSealError(null); setDraft(null);
+    try {
+      const saved = retained ?? await loadDraft(owner);
+      if (getStoredUser()?.userId !== owner) return;
+      setDraft(saved); setConsent(saved?.consent ?? null);
+      setStep(saved ? "review" : "consent");
+    } catch {
+      setSealError("La sauvegarde locale est indisponible. Téléchargez la capture avant de l’envoyer.");
+      setStep("consent");
+    } finally { setReady(true); }
+  };
+  const handleConsent = async (data: ConsentData) => {
+    setConsent(data);
+    if (draft) {
+      const renewed = { ...draft, consent: data, metadata: { ...draft.metadata,
+        geolocLat: data.geolocConsented ? draft.metadata.geolocLat : undefined,
+        geolocLng: data.geolocConsented ? draft.metadata.geolocLng : undefined } };
+      setDraft(renewed); setStep("review"); setSealError(null);
+      try { await saveDraft(renewed); }
+      catch { setSealError("Consentement actualisé pour cet envoi, mais la sauvegarde locale a échoué."); }
+    } else setStep("capture");
+  };
   const handleCaptured = async (blob: Blob, metadata: CaptureMetadata) => {
     if (!consent) return;
     const next: CaptureDraft = { id: crypto.randomUUID(), owner: getStoredUser()?.userId ?? "", blob, metadata, consent, savedAt: Date.now() };
@@ -49,9 +75,14 @@ export default function NouveauPage() {
     if (getStoredUser()?.userId !== draft.owner) { setSealError("Reconnectez-vous au compte qui a enregistré cette capture."); setStep("auth"); return; }
     setStep("sealing"); setProgress(0); setSealError(null);
     try {
+      const policy = await api<{version: string}>("/api/policy");
+      if (policy.version !== draft.consent.policyVersion) {
+        setSealError("Les conditions ont changé. Lisez-les et acceptez-les pour envoyer cette capture.");
+        setStep("consent"); return;
+      }
       const record = await sealCapture(draft, setProgress);
       setSealResult(record); setStep("done");
-      try { await clearDraft(); } catch { setSealError("Preuve enregistrée. Le brouillon local n’a pas pu être effacé ; supprimez les données du site sur cet appareil."); }
+      try { await clearDraft(draft.owner); } catch { setSealError("Preuve enregistrée. Le brouillon local n’a pas pu être effacé ; supprimez les données du site sur cet appareil."); }
       setDraft(null);
     } catch (err) {
       setSealError(err instanceof Error ? err.message : "Erreur lors du scellement");
@@ -59,8 +90,9 @@ export default function NouveauPage() {
     }
   };
   const discard = async () => {
+    if (!draft) return;
     if (!window.confirm("Effacer le brouillon de cet appareil ? Téléchargez-le d’abord si vous souhaitez le conserver.")) return;
-    try { await clearDraft(); setDraft(null); setSealError(null); setStep("consent"); }
+    try { await clearDraft(draft.owner); setDraft(null); setSealError(null); setStep("consent"); }
     catch { setSealError("Impossible d’effacer le brouillon local."); }
   };
 
@@ -84,7 +116,7 @@ export default function NouveauPage() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 p-6">
           {!ready && <p>Recherche d’une capture en attente…</p>}
           {ready && step === "auth" && <AuthStep onAuth={handleAuth} />}
-          {step === "consent" && <ConsentForm onConsent={handleConsent} />}
+          {step === "consent" && <ConsentForm onConsent={handleConsent} renewing={!!draft} initialGeolocConsented={draft?.consent.geolocConsented} />}
           {step === "capture" && consent && (
             <VideoCapture
               geolocConsented={consent.geolocConsented}
@@ -98,6 +130,7 @@ export default function NouveauPage() {
             <button className="w-full rounded-xl bg-realis-600 text-white p-3" onClick={upload}>Sceller cette capture</button>
             <button className="w-full p-2 underline" onClick={() => downloadBlob(draft.blob, `capture.${draft.metadata.mimeType.includes("mp4") ? "mp4" : "webm"}`)}>Télécharger la vidéo avant envoi</button>
             <Link className="block text-center underline" href="/compte" target="_blank" rel="noreferrer">Vérifier mon email / Mon compte</Link>
+            <button className="w-full p-2 underline" onClick={() => setStep("consent")}>Relire et actualiser mon consentement</button>
             <button className="w-full p-2 text-red-600" onClick={discard}>Effacer le brouillon</button>
           </div>}
           {step === "sealing" && <div aria-live="polite"><SealingStep /><progress className="w-full" max={100} value={progress} /><p>{progress < 100 ? `Envoi : ${progress} %` : "Envoi terminé, horodatage en cours…"}</p></div>}

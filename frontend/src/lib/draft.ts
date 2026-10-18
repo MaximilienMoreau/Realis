@@ -20,12 +20,39 @@ async function transaction<T>(mode: IDBTransactionMode, action: (store: IDBObjec
     tx.onabort = tx.onerror = () => { db.close(); reject(new Error("Sauvegarde locale impossible : espace insuffisant ou accès refusé.")); };
   });
 }
-export async function saveDraft(draft: CaptureDraft): Promise<void> { await transaction("readwrite", s => s.put(draft, "pending")); }
-export async function clearDraft(): Promise<void> { await transaction("readwrite", s => s.delete("pending")); }
-export async function loadDraft(): Promise<CaptureDraft | null> {
-  const draft = await transaction<CaptureDraft | undefined>("readonly", s => s.get("pending"));
-  if (draft && Date.now() - draft.savedAt > 24 * 60 * 60 * 1000) { await clearDraft(); return null; }
-  return draft ?? null;
+export async function saveDraft(draft: CaptureDraft): Promise<void> {
+  await transaction("readwrite", s => s.put(draft, draft.owner));
+}
+export async function clearDraft(owner: string): Promise<void> {
+  await transaction("readwrite", s => {
+    s.delete(owner);
+    const legacy = s.get("pending");
+    legacy.onsuccess = () => { if (legacy.result?.owner === owner) s.delete("pending"); };
+    return legacy;
+  });
+}
+export async function loadDraft(owner: string): Promise<CaptureDraft | null> {
+  // Migrate the former shared slot only when it belongs to this account.
+  const db = await open();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("drafts", "readwrite");
+    const store = tx.objectStore("drafts");
+    let draft: CaptureDraft | null = null;
+    const current = store.get(owner);
+    current.onsuccess = () => {
+      const legacy = store.get("pending");
+      legacy.onsuccess = () => {
+        const old = legacy.result as CaptureDraft | undefined;
+        const value = current.result ?? (old?.owner === owner ? old : null);
+        if (old?.owner === owner) store.delete("pending");
+        if (value?.owner === owner && Date.now() - value.savedAt <= 24 * 60 * 60 * 1000) {
+          draft = value; store.put(value, owner);
+        } else store.delete(owner);
+      };
+    };
+    tx.oncomplete = () => { db.close(); resolve(draft); };
+    tx.onabort = tx.onerror = () => { db.close(); reject(new Error("Lecture du brouillon impossible.")); };
+  });
 }
 export function downloadBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
