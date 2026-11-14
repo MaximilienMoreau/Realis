@@ -23,6 +23,19 @@ async function transaction<T>(mode: IDBTransactionMode, action: (store: IDBObjec
 export async function saveDraft(draft: CaptureDraft): Promise<void> {
   await transaction("readwrite", s => s.put(draft, draft.owner));
 }
+export async function purgeExpiredDrafts(): Promise<void> {
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  await transaction("readwrite", store => {
+    const request = store.openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      if (cursor.value.savedAt < cutoff) cursor.delete();
+      cursor.continue();
+    };
+    return request;
+  });
+}
 export async function clearDraft(owner: string): Promise<void> {
   await transaction("readwrite", s => {
     s.delete(owner);

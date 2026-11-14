@@ -12,6 +12,54 @@ test.beforeEach(async ({page}) => {
   await page.route("**/api/policy", route => route.fulfill({json: {version:"2026-09-23", text:"Conditions de test : conservation 365 jours.", retentionDays:365}}));
 });
 
+test("la connexion persistée ne provoque pas d’erreur d’hydratation", async ({page}) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/nouveau");
+  await expect(page.getByRole("heading", {name:"Connecté", exact:true})).toBeVisible();
+  await page.getByRole("button", {name:"Continuer", exact:true}).click();
+  await expect(page.getByText("Avant de commencer", {exact:true})).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("l’ouverture purge les brouillons expirés de tous les comptes sans connexion", async ({page}) => {
+  await page.goto("/nouveau");
+  await expect(page.getByRole("heading", {name:"Connecté", exact:true})).toBeVisible();
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open("realis-captures", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("drafts");
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction("drafts", "readwrite");
+        const store = tx.objectStore("drafts");
+        for (const key of ["expired-owner", "expired-other", "pending"]) {
+          store.put({owner:key, savedAt:Date.now() - 25 * 60 * 60 * 1000, blob:new Blob(["expired"])}, key);
+        }
+        store.put({owner:"recent-other", savedAt:Date.now(), blob:new Blob(["keep"])}, "recent-other");
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      };
+    });
+  });
+  await page.evaluate(() => localStorage.clear());
+  const anonymousPage = await page.context().newPage();
+  await anonymousPage.goto("/nouveau");
+  await expect(anonymousPage.getByRole("heading", {name:"Identification", exact:true})).toBeVisible();
+  await expect.poll(() => anonymousPage.evaluate(() => new Promise<IDBValidKey[]>((resolve, reject) => {
+    const req = indexedDB.open("realis-captures", 1);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction("drafts");
+      const keys = tx.objectStore("drafts").getAllKeys();
+      tx.oncomplete = () => { db.close(); resolve(keys.result); };
+      tx.onabort = () => { db.close(); reject(tx.error); };
+    };
+  }))).toEqual(["recent-other"]);
+});
+
 async function seedDraft(page: import("@playwright/test").Page) {
   await page.goto("/nouveau");
   await page.evaluate(async ({owner,id}) => {

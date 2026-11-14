@@ -9,7 +9,7 @@ import { saveAuth, getStoredUser, clearAuth, isAuthenticated } from "@/lib/auth"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-import { loadDraft, saveDraft, clearDraft, downloadBlob, type CaptureDraft } from "@/lib/draft";
+import { loadDraft, saveDraft, clearDraft, purgeExpiredDrafts, downloadBlob, type CaptureDraft } from "@/lib/draft";
 
 type Step = "auth" | "consent" | "capture" | "review" | "sealing" | "done";
 
@@ -25,6 +25,11 @@ export default function NouveauPage() {
   const [progress, setProgress] = useState(0);
   const [ready, setReady] = useState(true);
   const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => {
+    void purgeExpiredDrafts().catch(() => {
+      setSealError("Le nettoyage des brouillons expirés a échoué. Vérifiez l’accès au stockage local du navigateur.");
+    });
+  }, []);
   useEffect(() => {
     const changed = (event: StorageEvent) => {
       if (event.key === null || event.key === "realis_user_id" || event.key === "realis_token") window.location.reload();
@@ -191,7 +196,10 @@ function AuthStep({ onAuth }: { onAuth: () => void }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
+  if (!mounted) return <p>Chargement de la connexion…</p>;
   const stored = getStoredUser();
   if (isAuthenticated() && stored) {
     return (
